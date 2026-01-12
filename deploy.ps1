@@ -17,7 +17,7 @@ $remote = git remote
 if (-not $remote) {
     Write-Host ""
     Write-Host "Please enter your GitHub repository URL:" -ForegroundColor Yellow
-    Write-Host "Example: https://github.com/yourusername/campus-voice.git" -ForegroundColor Gray
+    Write-Host "Example: https://github.com/Sivansakthi007/campus-voice.git" -ForegroundColor Gray
     $repoUrl = Read-Host "Repository URL"
     
     if ($repoUrl) {
