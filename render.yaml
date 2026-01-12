@@ -1,0 +1,72 @@
+services:
+  # MySQL Database
+  - type: pserv
+    name: campus-voice-db
+    env: docker
+    plan: starter
+    region: oregon
+    dockerfilePath: ./Dockerfile.mysql
+    envVars:
+      - key: MYSQL_ROOT_PASSWORD
+        generateValue: true
+      - key: MYSQL_DATABASE
+        value: campus_voice_db
+      - key: MYSQL_USER
+        value: campusvoice
+      - key: MYSQL_PASSWORD
+        generateValue: true
+    disk:
+      name: mysql-data
+      mountPath: /var/lib/mysql
+      sizeGB: 10
+
+  # FastAPI Backend
+  - type: web
+    name: campus-voice-backend
+    env: docker
+    plan: starter
+    region: oregon
+    dockerfilePath: ./Dockerfile.backend
+    envVars:
+      - key: MYSQL_USER
+        value: campusvoice
+      - key: MYSQL_PASSWORD
+        sync: false  # Will be set manually to match database
+      - key: MYSQL_HOST
+        fromService:
+          type: pserv
+          name: campus-voice-db
+          property: host
+      - key: MYSQL_PORT
+        value: "3306"
+      - key: MYSQL_DB
+        value: campus_voice_db
+      - key: DATABASE_URL
+        sync: false  # Will be constructed from above vars
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: LLM_KEY
+        sync: false  # User must set their OpenAI API key
+    healthCheckPath: /api/health
+
+  # Next.js Frontend
+  - type: web
+    name: campus-voice-frontend
+    env: docker
+    plan: starter
+    region: oregon
+    dockerfilePath: ./Dockerfile.frontend
+    envVars:
+      - key: BACKEND_URL
+        fromService:
+          type: web
+          name: campus-voice-backend
+          property: hostport
+      - key: NODE_ENV
+        value: production
+    routes:
+      - type: rewrite
+        source: /api/*
+        destination: https://campus-voice-backend.onrender.com/api/*

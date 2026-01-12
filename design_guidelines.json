@@ -1,0 +1,163 @@
+{
+  "identity": {
+    "name": "Neo-Academic Redressal System",
+    "tone": "Empathetic, Efficient, Transparent, Modern",
+    "archetype": "Soft Utility (Student) + Control Room (Admin)"
+  },
+  "typography": {
+    "headings": {
+      "family": "Outfit, sans-serif",
+      "weights": ["500", "700"],
+      "usage": "Use for all page titles, section headers, and modal titles. Tight tracking (-0.02em)."
+    },
+    "body": {
+      "family": "Public Sans, sans-serif",
+      "weights": ["400", "500", "600"],
+      "usage": "Use for all paragraphs, inputs, and data tables. Relaxed leading (1.6)."
+    },
+    "mono": {
+      "family": "JetBrains Mono, monospace",
+      "usage": "Use for ticket IDs, system logs, and status codes."
+    }
+  },
+  "colors": {
+    "light": {
+      "background": "210 40% 98%",
+      "foreground": "222 47% 11%",
+      "card": "0 0% 100%",
+      "card_foreground": "222 47% 11%",
+      "popover": "0 0% 100%",
+      "popover_foreground": "222 47% 11%",
+      "primary": "243 75% 59%",
+      "primary_foreground": "210 40% 98%",
+      "secondary": "210 40% 96.1%",
+      "secondary_foreground": "222 47% 11%",
+      "muted": "210 40% 96.1%",
+      "muted_foreground": "215.4 16.3% 46.9%",
+      "accent": "243 75% 59%",
+      "accent_foreground": "210 40% 98%",
+      "destructive": "0 84.2% 60.2%",
+      "destructive_foreground": "210 40% 98%",
+      "border": "214.3 31.8% 91.4%",
+      "input": "214.3 31.8% 91.4%",
+      "ring": "243 75% 59%",
+      "chart_1": "243 75% 59%",
+      "chart_2": "160 84% 39%",
+      "chart_3": "30 80% 55%",
+      "chart_4": "280 65% 60%",
+      "chart_5": "340 75% 55%"
+    },
+    "dark": {
+      "background": "222 47% 11%",
+      "foreground": "210 40% 98%",
+      "card": "222 47% 11%",
+      "card_foreground": "210 40% 98%",
+      "popover": "222 47% 11%",
+      "popover_foreground": "210 40% 98%",
+      "primary": "243 75% 59%",
+      "primary_foreground": "210 40% 98%",
+      "secondary": "217.2 32.6% 17.5%",
+      "secondary_foreground": "210 40% 98%",
+      "muted": "217.2 32.6% 17.5%",
+      "muted_foreground": "215 20.2% 65.1%",
+      "accent": "217.2 32.6% 17.5%",
+      "accent_foreground": "210 40% 98%",
+      "destructive": "0 62.8% 30.6%",
+      "destructive_foreground": "210 40% 98%",
+      "border": "217.2 32.6% 17.5%",
+      "input": "217.2 32.6% 17.5%",
+      "ring": "243 75% 59%",
+      "chart_1": "243 75% 59%",
+      "chart_2": "160 84% 39%",
+      "chart_3": "30 80% 55%",
+      "chart_4": "280 65% 60%",
+      "chart_5": "340 75% 55%"
+    }
+  },
+  "layout": {
+    "spacing": {
+      "container_padding": "p-6 md:p-12",
+      "section_gap": "gap-8 md:gap-16",
+      "card_padding": "p-6"
+    },
+    "grids": {
+      "dashboard_student": "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6",
+      "dashboard_admin": "grid-cols-1 md:grid-cols-4 gap-4",
+      "form_layout": "max-w-2xl mx-auto space-y-8"
+    },
+    "radius": {
+      "default": "0.75rem",
+      "button": "9999px",
+      "card": "1rem"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg hover:shadow-xl transition-all duration-300 rounded-full px-8 py-6 font-medium",
+      "secondary": "bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded-full px-6 py-4 font-medium",
+      "ghost": "hover:bg-accent hover:text-accent-foreground rounded-full px-4 py-2"
+    },
+    "cards": {
+      "glass": "bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border border-white/20 dark:border-white/10 shadow-xl",
+      "solid": "bg-card text-card-foreground border border-border shadow-sm"
+    },
+    "inputs": {
+      "default": "h-12 rounded-lg border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+    }
+  },
+  "motion": {
+    "page_transition": {
+      "initial": { "opacity": 0, "y": 20 },
+      "animate": { "opacity": 1, "y": 0 },
+      "exit": { "opacity": 0, "y": -20 },
+      "transition": { "duration": 0.4, "ease": "easeOut" }
+    },
+    "stagger": {
+      "container": {
+        "hidden": { "opacity": 0 },
+        "show": {
+          "opacity": 1,
+          "transition": { "staggerChildren": 0.1 }
+        }
+      },
+      "item": {
+        "hidden": { "opacity": 0, "y": 20 },
+        "show": { "opacity": 1, "y": 0 }
+      }
+    },
+    "hover": {
+      "scale": 1.02,
+      "transition": { "duration": 0.2 }
+    }
+  },
+  "images": {
+    "hero_student": {
+      "url": "https://images.unsplash.com/photo-1758270705641-acf09b68a91f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2MzR8MHwxfHNlYXJjaHwxfHxjb2xsZWdlJTIwc3R1ZGVudHMlMjBkaXZlcnNlJTIwY2FtcHVzfGVufDB8fHx8MTc2NTYwMjMwNHww&ixlib=rb-4.1.0&q=85",
+      "alt": "Diverse students on campus",
+      "usage": "Landing page hero section"
+    },
+    "login_bg": {
+      "url": "https://images.unsplash.com/photo-1750863774182-06f0103b6b48?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzh8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjB1bml2ZXJzaXR5JTIwYXJjaGl0ZWN0dXJlJTIwbWluaW1hbGlzdHxlbnwwfHx8fDE3NjU2MDIzMDZ8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Modern university architecture",
+      "usage": "Login/Signup page background with overlay"
+    },
+    "ai_feature": {
+      "url": "https://images.unsplash.com/photo-1760112783543-737c7721a824?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njd8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMHRlY2hub2xvZ3klMjBkYXRhJTIwZmxvdyUyMGJsdWUlMjBwdXJwbGV8ZW58MHx8fHwxNzY1NjAyMzA4fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Abstract AI data flow",
+      "usage": "AI Analysis feature section or modal background"
+    }
+  },
+  "universal_guidelines": [
+    "Do not use gradients for text.",
+    "Avoid 'Inter' font for headings. Use 'Outfit'.",
+    "Use 'sonner' for toasts.",
+    "All interactive elements must have 'data-testid'.",
+    "Use 'lucide-react' for icons.",
+    "Ensure 4.5:1 contrast ratio for text.",
+    "Use 'framer-motion' for all animations.",
+    "Do not use generic AI emojis.",
+    "Mobile-first responsive design is mandatory.",
+    "Use 'glassmorphism' sparingly (only for overlays/cards on rich backgrounds)."
+  ],
+  "instructions_to_main_agent": "Follow the 'Neo-Academic' theme. Prioritize clarity and trust. Use the provided HSL color values in your tailwind config. Implement the 'Bento' grid for the student dashboard and 'Control Room' grid for the admin dashboard. Use the provided images for the respective sections."
+}

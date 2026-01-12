@@ -1,0 +1,49 @@
+from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, JSON
+from sqlalchemy.sql import func
+from db import Base
+import uuid
+
+
+def gen_uuid():
+    return str(uuid.uuid4())
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    password = Column(String(255), nullable=False)
+    name = Column(String(255), nullable=False)
+    role = Column(String(50), nullable=False)
+    department = Column(String(255), nullable=True)
+    student_id = Column(String(100), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Complaint(Base):
+    __tablename__ = "complaints"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    title = Column(String(512), nullable=False)
+    description = Column(Text, nullable=False)
+    voice_text = Column(Text, nullable=True)
+    status = Column(String(50), nullable=False)
+    category = Column(String(100), nullable=True)
+    priority = Column(String(50), nullable=True)
+    sentiment = Column(String(50), nullable=True)
+    foul_language_severity = Column(String(50), nullable=True)
+    foul_language_detected = Column(Boolean, default=False)
+    is_anonymous = Column(Boolean, default=False)
+    student_id = Column(String(36), nullable=False)
+    student_name = Column(String(255), nullable=True)
+    student_email = Column(String(255), nullable=True)
+    support_count = Column(Integer, default=0)
+    supported_by = Column(JSON, default=list)
+    responses = Column(JSON, default=list)
+    timeline = Column(JSON, default=list)
+    assigned_to = Column(String(36), nullable=True)
+    assigned_to_name = Column(String(255), nullable=True)
+    assigned_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

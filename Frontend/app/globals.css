@@ -1,0 +1,362 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Updated theme for CampusVoice with professional blue background and premium colors */
+  --background: oklch(0.18 0.04 250);
+  --foreground: oklch(0.98 0 0);
+  --card: oklch(0.22 0.05 250);
+  --card-foreground: oklch(0.98 0 0);
+  --popover: oklch(0.22 0.05 250);
+  --popover-foreground: oklch(0.98 0 0);
+  --primary: oklch(0.65 0.25 250);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.28 0.06 250);
+  --secondary-foreground: oklch(0.98 0 0);
+  --muted: oklch(0.28 0.06 250);
+  --muted-foreground: oklch(0.78 0 0);
+  --accent: oklch(0.65 0.22 280);
+  --accent-foreground: oklch(0.98 0 0);
+  --destructive: oklch(0.6 0.24 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.35 0.08 250 / 0.4);
+  --input: oklch(0.30 0.06 250 / 0.6);
+  --ring: oklch(0.65 0.25 250);
+  --chart-1: oklch(0.65 0.25 250);
+  --chart-2: oklch(0.65 0.22 280);
+  --chart-3: oklch(0.7 0.2 180);
+  --chart-4: oklch(0.75 0.18 150);
+  --chart-5: oklch(0.6 0.22 320);
+  --radius: 0.75rem;
+  --sidebar: oklch(0.15 0.04 250);
+  --sidebar-foreground: oklch(0.98 0 0);
+  --sidebar-primary: oklch(0.65 0.25 250);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.28 0.06 250);
+  --sidebar-accent-foreground: oklch(0.98 0 0);
+  --sidebar-border: oklch(0.35 0.08 250 / 0.4);
+  --sidebar-ring: oklch(0.65 0.25 250);
+}
+
+.dark {
+  --background: oklch(0.18 0.04 250);
+  --foreground: oklch(0.98 0 0);
+  --card: oklch(0.22 0.05 250);
+  --card-foreground: oklch(0.98 0 0);
+  --popover: oklch(0.22 0.05 250);
+  --popover-foreground: oklch(0.98 0 0);
+  --primary: oklch(0.65 0.25 250);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.28 0.06 250);
+  --secondary-foreground: oklch(0.98 0 0);
+  --muted: oklch(0.28 0.06 250);
+  --muted-foreground: oklch(0.78 0 0);
+  --accent: oklch(0.65 0.22 280);
+  --accent-foreground: oklch(0.98 0 0);
+  --destructive: oklch(0.6 0.24 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.35 0.08 250 / 0.4);
+  --input: oklch(0.30 0.06 250 / 0.6);
+  --ring: oklch(0.65 0.25 250);
+  --chart-1: oklch(0.65 0.25 250);
+  --chart-2: oklch(0.65 0.22 280);
+  --chart-3: oklch(0.7 0.2 180);
+  --chart-4: oklch(0.75 0.18 150);
+  --chart-5: oklch(0.6 0.22 320);
+  --sidebar: oklch(0.15 0.04 250);
+  --sidebar-foreground: oklch(0.98 0 0);
+  --sidebar-primary: oklch(0.65 0.25 250);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.28 0.06 250);
+  --sidebar-accent-foreground: oklch(0.98 0 0);
+  --sidebar-border: oklch(0.35 0.08 250 / 0.4);
+  --sidebar-ring: oklch(0.65 0.25 250);
+}
+
+/* Light mode theme - matching reference CampusVoice site colors */
+.light {
+  /* Backgrounds: White with soft indigo tint */
+  --background: #FFFFFF;
+  --foreground: #111827;
+  --card: #FFFFFF;
+  --card-foreground: #111827;
+  --popover: #FFFFFF;
+  --popover-foreground: #111827;
+  /* Primary: Indigo #4F46E5 */
+  --primary: #4F46E5;
+  --primary-foreground: #FFFFFF;
+  /* Secondary: Soft gray/white */
+  --secondary: #F9FAFB;
+  --secondary-foreground: #111827;
+  /* Muted: Light gray backgrounds */
+  --muted: #F3F4F6;
+  --muted-foreground: #6B7280;
+  /* Accent: Orange #F97316 */
+  --accent: #F97316;
+  --accent-foreground: #FFFFFF;
+  /* Destructive: Red */
+  --destructive: #EF4444;
+  --destructive-foreground: #FFFFFF;
+  /* Borders and inputs */
+  --border: #E5E7EB;
+  --input: #FFFFFF;
+  --ring: #4F46E5;
+  /* Charts */
+  --chart-1: #4F46E5;
+  --chart-2: #F97316;
+  --chart-3: #22C55E;
+  --chart-4: #3B82F6;
+  --chart-5: #8B5CF6;
+  /* Sidebar */
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #111827;
+  --sidebar-primary: #4F46E5;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #EEF2FF;
+  --sidebar-accent-foreground: #4F46E5;
+  --sidebar-border: #E5E7EB;
+  --sidebar-ring: #4F46E5;
+}
+
+@theme inline {
+  --font-sans: "Geist", "Geist Fallback";
+  --font-mono: "Geist Mono", "Geist Mono Fallback";
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Custom glassmorphism styles */
+.glass-card {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-card-hover {
+  transition: all 0.3s ease;
+}
+
+.glass-card-hover:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+}
+
+/* Light mode glassmorphism styles */
+.light .glass-card {
+  background: #FFFFFF;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+}
+
+.light .glass-card-hover:hover {
+  background: #FFFFFF;
+  border-color: rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+}
+
+/* Light mode role selection card text - dark charcoal for clean look */
+.light .glass-card h3 {
+  color: #111827 !important;
+  opacity: 1 !important;
+}
+
+/* ===== LIGHT MODE COMPREHENSIVE TEXT COLOR NORMALIZATION ===== */
+/* Override gray text colors to proper tones in light mode */
+.light .text-gray-200,
+.light .text-gray-300,
+.light .text-gray-400,
+.light .text-gray-500 {
+  color: #6B7280 !important;
+}
+
+.light .text-gray-600,
+.light .text-gray-700,
+.light .text-gray-800,
+.light .text-gray-900 {
+  color: #111827 !important;
+}
+
+/* Override white text colors to dark charcoal in light mode (except on primary/accent buttons) */
+.light .text-white:not(.bg-gradient-to-r):not([class*="from-blue"]):not([class*="from-emerald"]):not([class*="from-violet"]):not([class*="from-green"]):not([class*="bg-blue"]):not([class*="bg-emerald"]):not([class*="bg-violet"]):not([class*="bg-green"]):not([class*="bg-red"]):not([class*="bg-primary"]):not([class*="bg-indigo"]) {
+  color: #111827 !important;
+}
+
+/* Ensure placeholder text is visible but slightly subdued */
+.light input::placeholder,
+.light textarea::placeholder,
+.light .placeholder\:text-gray-500::placeholder,
+.light .placeholder\:text-gray-400::placeholder {
+  color: #9CA3AF !important;
+  opacity: 1 !important;
+}
+
+/* Ensure all regular paragraph and span text uses proper color */
+.light p:not([class*="text-primary"]):not([class*="text-blue"]):not([class*="text-white"]):not([class*="text-indigo"]),
+.light span:not([class*="text-primary"]):not([class*="text-blue"]):not([class*="text-white"]):not([class*="text-emerald"]):not([class*="text-green"]):not([class*="text-red"]):not([class*="text-yellow"]):not([class*="text-orange"]):not([class*="text-purple"]):not([class*="text-pink"]):not([class*="text-indigo"]) {
+  color: #111827;
+}
+
+/* Ensure headings use dark charcoal in light mode */
+.light h1,
+.light h2,
+.light h3,
+.light h4,
+.light h5,
+.light h6 {
+  color: #111827 !important;
+}
+
+/* Ensure labels use dark charcoal in light mode */
+.light label {
+  color: #111827 !important;
+}
+
+/* Ensure input text uses dark charcoal in light mode */
+.light input:not([type="submit"]):not([type="button"]),
+.light textarea,
+.light select {
+  color: #111827 !important;
+}
+
+/* Remove all text opacity reductions in light mode */
+.light [class*="opacity-"]:not(.hover\:opacity-90):not(.transition-opacity) {
+  opacity: 1;
+}
+
+/* Ensure statistics values and numbers use dark charcoal */
+.light .text-2xl,
+.light .text-3xl,
+.light .text-4xl,
+.light .text-5xl {
+  color: #111827 !important;
+}
+
+/* Ensure glass-card content is properly colored in light mode */
+.light .glass-card,
+.light .glass-card * {
+  color: #111827;
+}
+
+/* Keep primary/accent/link colors indigo in light mode */
+.light a:not(.glass-card):not([class*="bg-"]) {
+  color: #4F46E5;
+}
+
+.light .text-primary,
+.light .text-blue-500,
+.light .text-blue-400,
+.light [class*="text-primary"] {
+  color: #4F46E5 !important;
+}
+
+/* Ensure dropdown/popover backgrounds are white */
+.light [data-radix-popper-content-wrapper]>*,
+.light [role="listbox"],
+.light [role="menu"],
+.light [role="dialog"] {
+  background-color: #FFFFFF !important;
+  color: #111827 !important;
+}
+
+/* Ensure form elements have white backgrounds */
+.light .glass-card input,
+.light .glass-card textarea,
+.light .glass-card select {
+  background-color: #FFFFFF !important;
+  color: #111827 !important;
+  border-color: #E5E7EB !important;
+}
+
+/* Override bg-white/5 and similar transparent backgrounds */
+.light .bg-white\/5,
+.light .bg-white\/10,
+.light [class*="bg-white/"] {
+  background-color: #F3F4F6 !important;
+}
+
+/* Ensure icons in light mode are visible */
+.light svg:not([class*="text-blue"]):not([class*="text-primary"]):not([class*="text-emerald"]):not([class*="text-green"]):not([class*="text-red"]):not([class*="text-yellow"]):not([class*="text-orange"]):not([class*="fill-"]):not([class*="text-indigo"]) {
+  color: #4B5563 !important;
+}
+
+/* Keep status badge colors intact but ensure visibility */
+.light .bg-green-500\/20,
+.light .bg-yellow-500\/20,
+.light .bg-red-500\/20,
+.light .bg-blue-500\/20 {
+  background-color: rgba(var(--color), 0.2) !important;
+}
+
+/* ===== LIGHT MODE BACKGROUND GRADIENT OVERRIDE ===== */
+/* Override hardcoded dark gradient backgrounds with clean light theme */
+.light .bg-gradient-to-br[class*="from-[rgb(15"],
+.light .bg-gradient-to-br[class*="from-[rgb(15,15,20)"],
+.light div[class*="bg-gradient-to-br"][class*="from-[rgb(15"] {
+  background: linear-gradient(135deg, #FFFFFF 0%, #EEF2FF 50%, #F5F3FF 100%) !important;
+}
+
+/* Alternative selector for gradient override */
+.light [class*="from-[rgb(15,15,20)]"] {
+  --tw-gradient-from: #FFFFFF !important;
+  --tw-gradient-to: #EEF2FF !important;
+  --tw-gradient-stops: var(--tw-gradient-from), #F5F3FF, var(--tw-gradient-to) !important;
+  background: linear-gradient(135deg, #FFFFFF 0%, #EEF2FF 50%, #F5F3FF 100%) !important;
+}
+
+.light [class*="via-[rgb(24,24,32)]"] {
+  --tw-gradient-via: #EEF2FF !important;
+}
+
+/* Override any min-h-screen containers with dark gradients */
+.light .min-h-screen[class*="bg-gradient"] {
+  background: linear-gradient(135deg, #FFFFFF 0%, #EEF2FF 50%, #F5F3FF 100%) !important;
+}

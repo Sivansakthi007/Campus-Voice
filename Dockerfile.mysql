@@ -1,0 +1,9 @@
+FROM mysql:8.0
+
+# Set environment variables
+ENV MYSQL_DATABASE=campus_voice_db
+
+# Copy initialization scripts if any
+# COPY sql/*.sql /docker-entrypoint-initdb.d/
+
+EXPOSE 3306

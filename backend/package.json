@@ -1,0 +1,12 @@
+{
+  "name": "campus-voice-backend",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Minimal package.json to satisfy npm; the backend is a Python FastAPI app.",
+  "scripts": {
+    "start": "C:\\Users\\HP\\AppData\\Local\\Programs\\Python\\Python314\\python.exe -m uvicorn backend.server:app --reload --app-dir .. --host 127.0.0.1 --port 8000"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.3"
+  }
+}

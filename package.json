@@ -1,0 +1,13 @@
+{
+  "name": "campus-voice",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Top-level scripts for the Campus Voice project.",
+  "scripts": {
+    "start": "npm --prefix backend start",
+    "start:uvicorn": "C:\\Users\\HP\\AppData\\Local\\Programs\\Python\\Python314\\python.exe -m uvicorn backend.server:app --reload --app-dir . --host 127.0.0.1 --port 8000"
+  },
+  "dependencies": {
+    "axios": "^1.13.2"
+  }
+}
