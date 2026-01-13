@@ -64,6 +64,9 @@ async def startup():
     engine = get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+@app.get("/")
+async def root():
+    return {"message": "Campus Voice API is running", "docs_url": "/docs"}
 
 # Health check endpoint
 @api_router.get("/health")
