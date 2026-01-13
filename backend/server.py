@@ -542,6 +542,18 @@ async def create_complaint(complaint_data: ComplaintCreate, current_user: dict =
             detail=f"Similar complaint already exists: {duplicate_id}"
         )
 
+    # Check for foul/offensive language before processing
+    from utils.profanity_filter import contains_profanity
+    full_text_check = f"{complaint_data.title} {complaint_data.description}"
+    if complaint_data.voice_text:
+        full_text_check += f" {complaint_data.voice_text}"
+    
+    if contains_profanity(full_text_check):
+        raise HTTPException(
+            status_code=400,
+            detail="Unwanted or offensive language detected. Please do not send such messages."
+        )
+
     # AI Analysis
     full_text = f"{complaint_data.title}. {complaint_data.description}"
     if complaint_data.voice_text:
