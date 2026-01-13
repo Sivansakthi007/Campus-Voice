@@ -17,6 +17,7 @@ COPY Frontend/ .
 
 # Build Next.js app
 RUN npm run build
+RUN npm start
 
 # Production image, copy all the files and run next
 FROM base AS runner
