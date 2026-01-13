@@ -21,11 +21,11 @@ if not SQLALCHEMY_DATABASE_URL:
         mysql_host = os.environ.get("MYSQL_HOST", "localhost")
         mysql_port = os.environ.get("MYSQL_PORT", "3306")
         mysql_db = os.environ.get("MYSQL_DB", "campus_voice_db")
-        # Using asyncmy (already in requirements) for async MySQL connections
-        SQLALCHEMY_DATABASE_URL = f"mysql+aiomysql://{mysql_user}:{mysql_password}@{mysql_host}:{mysql_port}/{mysql_db}"
+        # Using asyncmy for async MySQL connections
+        SQLALCHEMY_DATABASE_URL = f"mysql+asyncmy://{mysql_user}:{mysql_password}@{mysql_host}:{mysql_port}/{mysql_db}"
     else:
         # Fallback to a local SQLite DB for development/testing if no URL provided
-        SQLALCHEMY_DATABASE_URL = "mysql+aiomysql://root:password@localhost/campus_voice_db"
+        SQLALCHEMY_DATABASE_URL = "mysql+asyncmy://root:password@localhost/campus_voice_db"
 
 
 # Example MySQL URL: "mysql+asyncmy://user:pass@localhost:3306/dbname"
