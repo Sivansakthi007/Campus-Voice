@@ -26,6 +26,7 @@ EXPOSE 8000
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app/backend
+ENV PIP_ROOT_USER_ACTION=ignore
 
 # Run uvicorn server
 CMD ["python", "-m", "uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
