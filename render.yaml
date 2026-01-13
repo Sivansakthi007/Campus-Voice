@@ -29,5 +29,10 @@ services:
           type: web
           name: campus-voice-backend
           property: url
+      - key: BACKEND_URL
+        fromService:
+          type: web
+          name: campus-voice-backend
+          property: url
       - key: NODE_ENV
         value: production
