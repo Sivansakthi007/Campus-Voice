@@ -28,7 +28,7 @@ interface UserData {
   created_at: string | null
 }
 
-export default function UserManagementPage({ params }: { params: { role: string } }) {
+export default function UserManagementPage({ params }: { params: Promise<{ role: string }> }) {
   const { role } = React.use(params) as { role: "admin" }
   const colors = ROLE_COLORS[role]
   const [searchTerm, setSearchTerm] = useState("")
