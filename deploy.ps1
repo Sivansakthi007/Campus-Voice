@@ -23,7 +23,8 @@ if (-not $remote) {
     if ($repoUrl) {
         git remote add origin $repoUrl
         Write-Host "Remote added successfully!" -ForegroundColor Green
-    } else {
+    }
+    else {
         Write-Host "No repository URL provided. Skipping remote setup." -ForegroundColor Red
         exit
     }
