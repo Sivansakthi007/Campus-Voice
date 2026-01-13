@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 load_dotenv(Path(__file__).resolve().parents[0] / '.env')
 
-SQLALCHEMY_DATABASE_URL = os.environ.get("SQLALCHEMY_DATABASE_URL")
+SQLALCHEMY_DATABASE_URL = os.environ.get("SQLALCHEMY_DATABASE_URL") or os.environ.get("DATABASE_URL")
 
 # If an explicit DB URL is not provided, try building one from MYSQL_* env vars
 # Note: URL-encode the password in case it contains special characters.
