@@ -1,42 +1,40 @@
-# Use Node.js LTS base image
+# -------------------------------
+# 1. Base image
+# -------------------------------
 FROM node:20-slim AS base
-
-# Install dependencies only when needed
-FROM base AS deps
 WORKDIR /app
 
-# Copy package files
-COPY Frontend/package*.json ./
+# -------------------------------
+# 2. Install dependencies
+# -------------------------------
+FROM base AS deps
+COPY Frontend/package.json Frontend/package-lock.json ./
 RUN npm ci
 
-# Rebuild the source code only when needed
+# -------------------------------
+# 3. Build Next.js app
+# -------------------------------
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY Frontend/ .
-
-# Build Next.js app
 RUN npm run build
-RUN npm start
 
-# Production image, copy all the files and run next
-FROM base AS runner
+# -------------------------------
+# 4. Production runner
+# -------------------------------
+FROM node:20-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV PORT=3000
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-
-# Copy built assets
+# Copy standalone build output
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-
-USER nextjs
 
 EXPOSE 3000
 
-ENV PORT=3000
-
+# Start Next.js server (IMPORTANT)
 CMD ["node", "server.js"]
