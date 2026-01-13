@@ -15,6 +15,7 @@ bcrypt>=4.1.0
 passlib>=1.7.4
 python-jose>=3.3.0
 PyJWT>=2.8.0
+cryptography>=42.0.0
 
 # Validation
 pydantic>=2.5.0
