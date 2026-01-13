@@ -1,8 +1,8 @@
 # Use Python 3.12 base image
 FROM python:3.12-slim
 
-# Set working directory
-WORKDIR /app
+# Set working directory to backend
+WORKDIR /app/backend
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -18,14 +18,14 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend code
-COPY backend/ ./backend/
+COPY backend/ .
 
 # Expose port
 EXPOSE 8000
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app/backend
 
 # Run uvicorn server
-CMD ["python", "-m", "uvicorn", "backend.server:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
