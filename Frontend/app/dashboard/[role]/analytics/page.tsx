@@ -1,5 +1,6 @@
 
 
+
 "use client"
 import React from "react"
 
@@ -8,37 +9,47 @@ import { motion } from "framer-motion"
 import { BarChart3, TrendingUp, Clock, CheckCircle } from "lucide-react"
 import { Sidebar } from "@/components/layout/sidebar"
 import type { UserRole } from "@/lib/constants"
-import { mockStorage, type Complaint } from "@/lib/mock-data"
+import { apiClient } from "@/lib/api"
 import { useRouter } from "next/navigation"
 
 export default function AnalyticsPage({ params }: { params: { role: string } }) {
   const { role } = React.use(params) as { role: UserRole }
   const router = useRouter()
-  const [complaints, setComplaints] = useState<Complaint[]>([])
+  const [stats, setStats] = useState({
+    total: 0,
+    resolved: 0,
+    avgResolutionTime: "0 days",
+    satisfactionRate: "0%",
+  })
+  const [categoryStats, setCategoryStats] = useState<Record<string, number>>({})
 
   useEffect(() => {
-    const user = mockStorage.getUser()
-    if (!user || user.role !== role) {
-      router.push("/login")
-      return
+    const fetchAnalytics = async () => {
+      try {
+        const data = await apiClient.getAnalyticsOverview()
+
+        // Format the stats
+        setStats({
+          total: data.total_complaints,
+          resolved: data.resolved_complaints,
+          avgResolutionTime: data.avg_resolution_time ? `${data.avg_resolution_time} days` : "0 days",
+          satisfactionRate: `${data.satisfaction_rate}%`,
+        })
+
+        // Set category breakdown
+        setCategoryStats(data.by_category || {})
+      } catch (error: any) {
+        console.error("Failed to fetch analytics:", error)
+        // If unauthorized, redirect to login
+        if (error?.message?.includes("401") || error?.message?.includes("authenticated")) {
+          router.push("/login")
+        }
+      }
     }
-    setComplaints(mockStorage.getComplaints())
+
+    fetchAnalytics()
   }, [role, router])
 
-  const stats = {
-    total: complaints.length,
-    resolved: complaints.filter((c) => c.status === "resolved").length,
-    avgResolutionTime: "2.5 days",
-    satisfactionRate: "87%",
-  }
-
-  const categoryStats = complaints.reduce(
-    (acc, complaint) => {
-      acc[complaint.category] = (acc[complaint.category] || 0) + 1
-      return acc
-    },
-    {} as Record<string, number>,
-  )
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[rgb(15,15,20)] via-[rgb(24,24,32)] to-[rgb(15,15,20)] flex">

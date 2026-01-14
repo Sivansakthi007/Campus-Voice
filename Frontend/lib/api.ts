@@ -380,6 +380,8 @@ class ApiClient {
     total_complaints: number
     resolved_complaints: number
     pending_complaints: number
+    avg_resolution_time: number
+    satisfaction_rate: number
     resolution_rate: number
     by_category: Record<string, number>
     by_priority: Record<string, number>
@@ -389,6 +391,8 @@ class ApiClient {
       total_complaints: number
       resolved_complaints: number
       pending_complaints: number
+      avg_resolution_time: number
+      satisfaction_rate: number
       resolution_rate: number
       by_category: Record<string, number>
       by_priority: Record<string, number>

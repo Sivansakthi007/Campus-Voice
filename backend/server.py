@@ -952,6 +952,30 @@ async def get_analytics_overview(current_user: dict = Depends(get_current_user),
     resolved = (await session.execute(resolved_stmt)).scalar() or 0
     pending = (await session.execute(pending_stmt)).scalar() or 0
 
+    # Calculate average resolution time for resolved complaints
+    avg_resolution_time = 0.0
+    if resolved > 0:
+        resolved_complaints_stmt = select(Complaint.created_at, Complaint.updated_at).where(
+            Complaint.status == ComplaintStatus.RESOLVED,
+            Complaint.created_at.isnot(None),
+            Complaint.updated_at.isnot(None)
+        )
+        resolved_complaints = (await session.execute(resolved_complaints_stmt)).all()
+        
+        if resolved_complaints:
+            total_resolution_days = 0.0
+            for created_at, updated_at in resolved_complaints:
+                resolution_time = (updated_at - created_at).total_seconds() / 86400  # Convert to days
+                total_resolution_days += resolution_time
+            avg_resolution_time = round(total_resolution_days / len(resolved_complaints), 1)
+
+    # Calculate satisfaction rate based on positive sentiment
+    satisfaction_rate = 0.0
+    if total > 0:
+        positive_stmt = select(func.count()).where(Complaint.sentiment == SentimentType.POSITIVE)
+        positive_count = (await session.execute(positive_stmt)).scalar() or 0
+        satisfaction_rate = round((positive_count / total * 100), 0)
+
     # By category
     cat_stmt = select(Complaint.category, func.count()).group_by(Complaint.category)
     prio_stmt = select(Complaint.priority, func.count()).group_by(Complaint.priority)
@@ -965,6 +989,8 @@ async def get_analytics_overview(current_user: dict = Depends(get_current_user),
         "total_complaints": total,
         "resolved_complaints": resolved,
         "pending_complaints": pending,
+        "avg_resolution_time": avg_resolution_time,
+        "satisfaction_rate": satisfaction_rate,
         "resolution_rate": round((resolved / total * 100) if total > 0 else 0, 2),
         "by_category": {k: v for k, v in cat_rows},
         "by_priority": {k: v for k, v in prio_rows},
