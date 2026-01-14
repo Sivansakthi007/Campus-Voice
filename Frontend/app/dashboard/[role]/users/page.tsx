@@ -15,8 +15,9 @@ import { motion } from "framer-motion"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Chatbot } from "@/components/chatbot"
 import { ROLE_COLORS } from "@/lib/constants"
-import { Users, Search, Plus, Edit, Trash2, Shield } from "lucide-react"
+import { Users, Search, Plus, Edit, Trash2, Shield, X } from "lucide-react"
 import { apiClient } from "@/lib/api"
+import type { RegisterRequest } from "@/lib/api"
 import { useEffect } from "react"
 
 interface UserData {
@@ -35,6 +36,19 @@ export default function UserManagementPage({ params }: { params: Promise<{ role:
   const [filterRole, setFilterRole] = useState<string>("all")
   const [users, setUsers] = useState<UserData[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Add/Delete modal states
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [selectedUser, setSelectedUser] = useState<UserData | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Add user form fields
+  const [formName, setFormName] = useState("")
+  const [formEmail, setFormEmail] = useState("")
+  const [formPassword, setFormPassword] = useState("")
+  const [formRole, setFormRole] = useState("student")
+  const [formDepartment, setFormDepartment] = useState("")
 
   useEffect(() => {
     async function fetchUsers() {
@@ -60,6 +74,68 @@ export default function UserManagementPage({ params }: { params: Promise<{ role:
     }
     fetchUsers()
   }, [])
+
+  // Refetch users helper
+  const refetchUsers = async () => {
+    try {
+      const fetchedUsers = await apiClient.getUsers()
+      const mappedUsers = fetchedUsers.map((u: any) => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        department: u.department || "N/A",
+        created_at: u.created_at,
+      }))
+      setUsers(mappedUsers)
+    } catch (error) {
+      console.error("Failed to refetch users:", error)
+    }
+  }
+
+  // Handle Add User
+  const handleAddUser = async () => {
+    if (!formName || !formEmail || !formPassword) return
+    setIsSubmitting(true)
+    try {
+      const userData: RegisterRequest = {
+        name: formName,
+        email: formEmail,
+        password: formPassword,
+        role: formRole as any,
+        department: formDepartment || undefined,
+      }
+      await apiClient.createUser(userData)
+      await refetchUsers()
+      setShowAddModal(false)
+      // Reset form
+      setFormName("")
+      setFormEmail("")
+      setFormPassword("")
+      setFormRole("student")
+      setFormDepartment("")
+    } catch (error) {
+      console.error("Failed to add user:", error)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  // Handle Delete User
+  const handleDeleteUser = async () => {
+    if (!selectedUser) return
+    setIsSubmitting(true)
+    try {
+      await apiClient.deleteUser(selectedUser.id)
+      await refetchUsers()
+      setShowDeleteConfirm(false)
+      setSelectedUser(null)
+    } catch (error) {
+      console.error("Failed to delete user:", error)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   const filteredUsers = users.filter((user) => {
     const matchesSearch =
@@ -88,6 +164,7 @@ export default function UserManagementPage({ params }: { params: Promise<{ role:
               <p className="text-gray-400">Manage all system users and permissions</p>
             </div>
             <button
+              onClick={() => setShowAddModal(true)}
               className={`flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r ${colors.gradient} text-white hover:opacity-90 transition-opacity`}
             >
               <Plus className="w-5 h-5" />
@@ -218,7 +295,10 @@ export default function UserManagementPage({ params }: { params: Promise<{ role:
                           <button className="p-2 hover:bg-white/10 rounded-lg transition-colors">
                             <Edit className="w-4 h-4 text-blue-400" />
                           </button>
-                          <button className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                          <button
+                            onClick={() => { setSelectedUser(user); setShowDeleteConfirm(true); }}
+                            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                          >
                             <Trash2 className="w-4 h-4 text-red-400" />
                           </button>
                         </div>
@@ -232,6 +312,95 @@ export default function UserManagementPage({ params }: { params: Promise<{ role:
         </motion.div>
       </main>
       <Chatbot role={role} />
+
+      {/* Add User Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="glass-card rounded-2xl p-6 border border-white/10 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-white">Add New User</h2>
+              <button onClick={() => setShowAddModal(false)} className="p-2 hover:bg-white/10 rounded-lg">
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <input
+                type="text"
+                placeholder="Full Name"
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-white/30"
+              />
+              <input
+                type="email"
+                placeholder="Email"
+                value={formEmail}
+                onChange={(e) => setFormEmail(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-white/30"
+              />
+              <input
+                type="password"
+                placeholder="Password"
+                value={formPassword}
+                onChange={(e) => setFormPassword(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-white/30"
+              />
+              <select
+                value={formRole}
+                onChange={(e) => setFormRole(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-white/30"
+              >
+                <option value="student">Student</option>
+                <option value="staff">Staff</option>
+                <option value="hod">HOD</option>
+                <option value="principal">Principal</option>
+                <option value="admin">Admin</option>
+              </select>
+              <input
+                type="text"
+                placeholder="Department (optional)"
+                value={formDepartment}
+                onChange={(e) => setFormDepartment(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-white/30"
+              />
+              <button
+                onClick={handleAddUser}
+                disabled={isSubmitting || !formName || !formEmail || !formPassword}
+                className={`w-full py-3 rounded-xl bg-gradient-to-r ${colors.gradient} text-white hover:opacity-90 transition-opacity disabled:opacity-50`}
+              >
+                {isSubmitting ? "Adding..." : "Add User"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && selectedUser && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="glass-card rounded-2xl p-6 border border-white/10 w-full max-w-md mx-4">
+            <h2 className="text-xl font-bold text-white mb-4">Confirm Delete</h2>
+            <p className="text-gray-400 mb-6">
+              Are you sure you want to delete <span className="text-white font-medium">{selectedUser.name}</span>? This action cannot be undone.
+            </p>
+            <div className="flex gap-4">
+              <button
+                onClick={() => { setShowDeleteConfirm(false); setSelectedUser(null); }}
+                className="flex-1 py-3 rounded-xl border border-white/10 text-white hover:bg-white/5 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteUser}
+                disabled={isSubmitting}
+                className="flex-1 py-3 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50"
+              >
+                {isSubmitting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

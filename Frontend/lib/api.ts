@@ -207,6 +207,25 @@ class ApiClient {
     return response.data
   }
 
+  // Create user (admin only) - uses existing register endpoint
+  async createUser(userData: RegisterRequest): Promise<any> {
+    const response = await this.request<any>("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify(userData),
+    })
+    // Don't set token - admin is creating for another user
+    return response.data
+  }
+
+  // Delete user (admin only)
+  async deleteUser(userId: string): Promise<void> {
+    await this.request(`/api/users/${userId}`, {
+      method: "DELETE",
+    })
+  }
+
+
+
   async getComplaint(id: string): Promise<Complaint> {
     const response = await this.request<any>(`/api/complaints/${id}`)
     const data = response.data || response

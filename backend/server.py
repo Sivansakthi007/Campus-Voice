@@ -479,6 +479,31 @@ async def list_users(role: Optional[str] = None, current_user: dict = Depends(ge
 
     return create_response(True, "Users retrieved successfully", [_to_resp(u) for u in users])
 
+@api_router.delete("/users/{user_id}")
+async def delete_user(user_id: str, current_user: dict = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    """
+    Delete a user (Admin only).
+    """
+    # Only admin can delete users
+    if current_user["role"] != UserRole.ADMIN:
+        return create_response(False, "Permission denied", status_code=403)
+    
+    # Prevent admin from deleting themselves
+    if current_user["id"] == user_id:
+        return create_response(False, "Cannot delete yourself", status_code=400)
+    
+    user_obj = await session.get(User, user_id)
+    if not user_obj:
+        return create_response(False, "User not found", status_code=404)
+    
+    await session.delete(user_obj)
+    await session.commit()
+    logger.info(f"User {user_id} deleted by Admin {current_user['id']}")
+    
+    return create_response(True, "User deleted successfully")
+
+
+
 @api_router.post("/auth/upload-profile-photo")
 async def upload_profile_photo(
     file: UploadFile = File(...),
