@@ -56,9 +56,23 @@ export const mockStorage = {
     const user = localStorage.getItem("campusvoice_user")
     return user ? JSON.parse(user) : null
   },
-  setUser: (user: User) => {
-    if (typeof window === "undefined") return
-    localStorage.setItem("campusvoice_user", JSON.stringify(user))
+  setUser: (user: User): boolean => {
+    if (typeof window === "undefined") return false
+    try {
+      localStorage.setItem("campusvoice_user", JSON.stringify(user))
+      return true
+    } catch (error) {
+      console.error("Failed to save user to localStorage:", error)
+      // Try saving without avatar if it's too large
+      try {
+        const userWithoutAvatar = { ...user, avatar: undefined }
+        localStorage.setItem("campusvoice_user", JSON.stringify(userWithoutAvatar))
+        return true
+      } catch {
+        console.error("Still unable to save user after removing avatar")
+        return false
+      }
+    }
   },
   clearUser: () => {
     if (typeof window === "undefined") return
