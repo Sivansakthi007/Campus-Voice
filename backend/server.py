@@ -985,7 +985,7 @@ async def get_analytics_overview(current_user: dict = Depends(get_current_user),
     prio_rows = (await session.execute(prio_stmt)).all()
     sent_rows = (await session.execute(sent_stmt)).all()
 
-    return {
+    data = {
         "total_complaints": total,
         "resolved_complaints": resolved,
         "pending_complaints": pending,
@@ -996,6 +996,7 @@ async def get_analytics_overview(current_user: dict = Depends(get_current_user),
         "by_priority": {k: v for k, v in prio_rows},
         "by_sentiment": {k: v for k, v in sent_rows}
     }
+    return create_response(True, "Analytics retrieved successfully", data)
 
 @api_router.get("/analytics/staff-performance")
 async def get_staff_performance(current_user: dict = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
