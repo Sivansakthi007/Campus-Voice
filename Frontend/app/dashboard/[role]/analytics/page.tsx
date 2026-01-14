@@ -12,7 +12,7 @@ import type { UserRole } from "@/lib/constants"
 import { apiClient } from "@/lib/api"
 import { useRouter } from "next/navigation"
 
-export default function AnalyticsPage({ params }: { params: { role: string } }) {
+export default function AnalyticsPage({ params }: { params: Promise<{ role: string }> }) {
   const { role } = React.use(params) as { role: UserRole }
   const router = useRouter()
   const [stats, setStats] = useState({
