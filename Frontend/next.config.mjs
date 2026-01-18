@@ -9,12 +9,11 @@ const nextConfig = {
   devIndicators: false,
   output: 'standalone',
   async rewrites() {
+    const backendUrl = process.env.BACKEND_URL || 'https://campus-voice-backend-8sn7.onrender.com';
     return [
       {
         source: '/api/:path*',
-        destination: process.env.BACKEND_URL
-          ? `${process.env.BACKEND_URL}/api/:path*`
-          : 'http://localhost:8000/api/:path*',
+        destination: `${backendUrl}/api/:path*`,
       },
     ]
   },

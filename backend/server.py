@@ -49,13 +49,18 @@ LLM_KEY = os.environ.get('LLM_KEY')
 app = FastAPI(title="Campus Voice API")
 api_router = APIRouter(prefix="/api")
 
-# Add CORS middleware
+# Add CORS middleware - Production Ready
+ALLOWED_ORIGINS = [
+    "https://campus-voice-frontend-8sn7.onrender.com",  # Production frontend
+    "http://localhost:3000",  # Local development
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
 )
 
 @app.on_event("startup")
