@@ -176,7 +176,7 @@ Docker	Containerization
 Render.com	Cloud hosting
 GitHub	Version control & CI/CD
 
-
+Deployment link = "https://campus-voice-frontend-8sn7.onrender.com"
 
 ---
 
