@@ -227,18 +227,33 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
   }
 
   useEffect(() => {
-    if (!showAssignModal) return
+    if (!showAssignModal || !complaint) return
       ; (async () => {
         try {
-          const users = await apiClient.getUsers("staff")
-          setStaffList(users || [])
+          // Use new eligible-staff endpoint that excludes staff mentioned in complaint
+          const result = await apiClient.getEligibleStaff(complaint.id)
+          setStaffList(result.staff || [])
+
+          // Notify user if some staff were excluded due to conflict of interest
+          if (result.excluded_count > 0) {
+            toast.info(
+              `${result.excluded_count} staff member(s) excluded due to conflict of interest`,
+              { duration: 4000 }
+            )
+          }
         } catch (err) {
-          console.error("Failed to fetch staff list:", err)
-          setStaffList([])
-          toast.error("Could not load staff list")
+          console.error("Failed to fetch eligible staff list:", err)
+          // Fallback to all staff if endpoint fails
+          try {
+            const users = await apiClient.getUsers("staff")
+            setStaffList(users || [])
+          } catch {
+            setStaffList([])
+            toast.error("Could not load staff list")
+          }
         }
       })()
-  }, [showAssignModal])
+  }, [showAssignModal, complaint])
 
   if (!complaint) {
     if (!complaintId) return null

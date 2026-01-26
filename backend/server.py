@@ -786,22 +786,39 @@ async def update_complaint(complaint_id: str, update_data: ComplaintUpdate, curr
         complaint_obj.responses = responses
 
     if update_data.assigned_to:
-        # set assigned user id
-        complaint_obj.assigned_to = update_data.assigned_to
-        # try to fetch the user to store name
+        # First, fetch the user to check for conflict of interest
         try:
             user_stmt = select(User).where(User.id == update_data.assigned_to)
             res = await session.execute(user_stmt)
             assigned_user = res.scalars().first()
-            if assigned_user:
-                complaint_obj.assigned_to_name = assigned_user.name
+            
+            if not assigned_user:
+                return create_response(False, "Staff member not found", status_code=404)
+            
+            # CONFLICT OF INTEREST CHECK: Prevent assigning staff mentioned in the complaint
+            from utils.conflict_detection import is_staff_mentioned_in_complaint
+            if is_staff_mentioned_in_complaint(
+                assigned_user.name,
+                complaint_obj.title,
+                complaint_obj.description
+            ):
+                logger.warning(f"Conflict of interest: Cannot assign {assigned_user.name} to complaint {complaint_id} - mentioned in complaint")
+                return create_response(
+                    False,
+                    f"Cannot assign {assigned_user.name} to this complaint - they are mentioned in the complaint. Please select a different staff member.",
+                    status_code=400
+                )
+            
+            # Set assigned user id and name
+            complaint_obj.assigned_to = update_data.assigned_to
+            complaint_obj.assigned_to_name = assigned_user.name
             complaint_obj.assigned_at = datetime.now(timezone.utc)
 
             # append a timeline entry for the assignment
             timeline = complaint_obj.timeline or []
             timeline.append({
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "action": f"Assigned to {assigned_user.name if assigned_user else update_data.assigned_to}",
+                "action": f"Assigned to {assigned_user.name}",
                 "by": current_user["name"]
             })
             complaint_obj.timeline = timeline
@@ -809,8 +826,7 @@ async def update_complaint(complaint_id: str, update_data: ComplaintUpdate, curr
             complaint_obj.status = ComplaintStatus.IN_PROGRESS
         except Exception as e:
             logger.error(f"Error assigning complaint: {str(e)}")
-            # fail gracefully and still set the id
-            pass
+            return create_response(False, f"Error assigning complaint: {str(e)}", status_code=500)
 
     # update timestamp
     complaint_obj.updated_at = datetime.now(timezone.utc)
@@ -927,6 +943,25 @@ async def update_complaint_status(complaint_id: str, status: str, remarks: str, 
     if not complaint_obj:
         return create_response(False, "Complaint not found", status_code=404)
 
+    # CONFLICT OF INTEREST CHECK: Prevent user from verifying complaints that mention them
+    from utils.conflict_detection import can_user_verify_complaint, get_escalation_authority
+    can_verify, reason = can_user_verify_complaint(
+        user["name"],
+        user["role"],
+        complaint_obj.title,
+        complaint_obj.description
+    )
+    
+    if not can_verify:
+        escalate_to = get_escalation_authority(user["role"])
+        logger.warning(f"Conflict of interest: {user['name']} ({user['role']}) cannot verify complaint {complaint_id} - mentioned in complaint")
+        return create_response(
+            False,
+            reason,
+            {"escalate_to": escalate_to} if escalate_to else None,
+            status_code=403
+        )
+
     # Update status and log
     complaint_obj.status = status
     complaint_obj.timeline.append({
@@ -941,6 +976,52 @@ async def update_complaint_status(complaint_id: str, status: str, remarks: str, 
     await session.refresh(complaint_obj)
 
     return {"success": True}
+
+@api_router.get("/complaints/{complaint_id}/eligible-staff")
+async def get_eligible_staff(
+    complaint_id: str,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    Get list of staff members eligible to handle this complaint.
+    Excludes staff members who are mentioned in the complaint to prevent conflict of interest.
+    """
+    # Only HOD/Principal/Admin can access this
+    if current_user["role"] not in [UserRole.HOD, UserRole.PRINCIPAL, UserRole.ADMIN]:
+        return create_response(False, "Permission denied", status_code=403)
+    
+    complaint = await session.get(Complaint, complaint_id)
+    if not complaint:
+        return create_response(False, "Complaint not found", status_code=404)
+    
+    # Get all staff
+    stmt = select(User).where(User.role == UserRole.STAFF)
+    res = await session.execute(stmt)
+    all_staff = res.scalars().all()
+    
+    # Filter out mentioned staff using conflict detection
+    from utils.conflict_detection import get_eligible_staff_for_assignment
+    eligible_staff, excluded_staff = get_eligible_staff_for_assignment(complaint, all_staff)
+    
+    eligible_list = [
+        {"id": s.id, "name": s.name, "department": s.department}
+        for s in eligible_staff
+    ]
+    
+    excluded_names = [s.name for s in excluded_staff]
+    
+    logger.info(f"Eligible staff for complaint {complaint_id}: {len(eligible_list)} eligible, {len(excluded_names)} excluded")
+    
+    return create_response(
+        True,
+        "Eligible staff retrieved",
+        {
+            "staff": eligible_list,
+            "excluded_count": len(excluded_staff),
+            "excluded_names": excluded_names  # For admin visibility
+        }
+    )
 
 # ===== ANALYTICS ENDPOINTS =====
 @api_router.get("/analytics/overview")

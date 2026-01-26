@@ -381,6 +381,23 @@ class ApiClient {
     return response.data || response
   }
 
+  /**
+   * Get eligible staff members for assignment to a complaint.
+   * Excludes staff members mentioned in the complaint (conflict of interest).
+   */
+  async getEligibleStaff(complaintId: string): Promise<{
+    staff: Array<{ id: string; name: string; department?: string }>;
+    excluded_count: number;
+    excluded_names: string[];
+  }> {
+    const response = await this.request<{
+      staff: Array<{ id: string; name: string; department?: string }>;
+      excluded_count: number;
+      excluded_names: string[];
+    }>(`/api/complaints/${complaintId}/eligible-staff`)
+    return response.data
+  }
+
   // Analytics methods
   async getAnalyticsOverview(): Promise<{
     total_complaints: number
