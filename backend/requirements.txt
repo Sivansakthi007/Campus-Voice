@@ -33,3 +33,7 @@ python-dotenv>=1.0.0
 
 # Utilities
 Jinja2>=3.1.0
+
+# Report Export
+openpyxl>=3.1.0
+reportlab>=4.0.0

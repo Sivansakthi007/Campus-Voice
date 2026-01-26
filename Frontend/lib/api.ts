@@ -447,6 +447,75 @@ class ApiClient {
     return response.data
   }
 
+  // Staff self-service methods
+  async getMyPerformance(): Promise<{
+    total_assigned: number
+    resolved: number
+    rejected: number
+    pending: number
+    in_progress: number
+    resolution_rate: number
+    avg_resolution_time_days: number
+    staff_name: string
+  }> {
+    const response = await this.request<{
+      total_assigned: number
+      resolved: number
+      rejected: number
+      pending: number
+      in_progress: number
+      resolution_rate: number
+      avg_resolution_time_days: number
+      staff_name: string
+    }>("/api/staff/my-performance")
+    return response.data
+  }
+
+  async getMyComplaints(): Promise<Array<{
+    id: string
+    title: string
+    description: string
+    category: string
+    status: string
+    priority: string
+    created_at: string
+    updated_at: string
+    assigned_at: string | null
+    resolution_outcome: string | null
+    student_name: string
+  }>> {
+    const response = await this.request<Array<{
+      id: string
+      title: string
+      description: string
+      category: string
+      status: string
+      priority: string
+      created_at: string
+      updated_at: string
+      assigned_at: string | null
+      resolution_outcome: string | null
+      student_name: string
+    }>>("/api/staff/my-complaints")
+    return response.data
+  }
+
+  async downloadPerformanceReport(format: 'pdf' | 'excel'): Promise<Blob> {
+    const url = `${this.baseURL}/api/staff/report/export?format=${format}`
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+      },
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Download failed' }))
+      throw new Error(error.message || 'Download failed')
+    }
+
+    return response.blob()
+  }
+
   // Token management
   setToken(token: string | null) {
     this.token = token

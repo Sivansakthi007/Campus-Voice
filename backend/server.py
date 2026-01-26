@@ -1110,6 +1110,316 @@ async def get_staff_performance(current_user: dict = Depends(get_current_user), 
 
     return create_response(True, "Staff performance retrieved successfully", performance)
 
+# ===== STAFF SELF-SERVICE ENDPOINTS =====
+
+@api_router.get("/staff/my-performance")
+async def get_my_performance(current_user: dict = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    """Get performance statistics for the logged-in staff member"""
+    if current_user["role"] != UserRole.STAFF:
+        return create_response(False, "Permission denied. This endpoint is for staff only.", status_code=403)
+    
+    staff_id = current_user["id"]
+    
+    # Get counts by status
+    total_stmt = select(func.count()).where(Complaint.assigned_to == staff_id)
+    resolved_stmt = select(func.count()).where(
+        Complaint.assigned_to == staff_id,
+        Complaint.status == ComplaintStatus.RESOLVED
+    )
+    rejected_stmt = select(func.count()).where(
+        Complaint.assigned_to == staff_id,
+        Complaint.status == ComplaintStatus.REJECTED
+    )
+    in_progress_stmt = select(func.count()).where(
+        Complaint.assigned_to == staff_id,
+        Complaint.status == ComplaintStatus.IN_PROGRESS
+    )
+    submitted_stmt = select(func.count()).where(
+        Complaint.assigned_to == staff_id,
+        Complaint.status == ComplaintStatus.SUBMITTED
+    )
+    reviewed_stmt = select(func.count()).where(
+        Complaint.assigned_to == staff_id,
+        Complaint.status == ComplaintStatus.REVIEWED
+    )
+    
+    total = (await session.execute(total_stmt)).scalar() or 0
+    resolved = (await session.execute(resolved_stmt)).scalar() or 0
+    rejected = (await session.execute(rejected_stmt)).scalar() or 0
+    in_progress = (await session.execute(in_progress_stmt)).scalar() or 0
+    submitted = (await session.execute(submitted_stmt)).scalar() or 0
+    reviewed = (await session.execute(reviewed_stmt)).scalar() or 0
+    
+    pending = submitted + reviewed + in_progress
+    
+    # Calculate average resolution time for resolved complaints
+    resolved_complaints_stmt = select(Complaint).where(
+        Complaint.assigned_to == staff_id,
+        Complaint.status == ComplaintStatus.RESOLVED
+    )
+    res = await session.execute(resolved_complaints_stmt)
+    resolved_complaints = res.scalars().all()
+    
+    avg_resolution_days = 0.0
+    if resolved_complaints:
+        total_days = 0.0
+        count = 0
+        for c in resolved_complaints:
+            if c.updated_at and c.assigned_at:
+                diff = c.updated_at - c.assigned_at
+                total_days += diff.total_seconds() / 86400  # Convert to days
+                count += 1
+        if count > 0:
+            avg_resolution_days = round(total_days / count, 1)
+    
+    data = {
+        "total_assigned": total,
+        "resolved": resolved,
+        "rejected": rejected,
+        "pending": pending,
+        "in_progress": in_progress,
+        "resolution_rate": round((resolved / total * 100) if total > 0 else 0, 1),
+        "avg_resolution_time_days": avg_resolution_days,
+        "staff_name": current_user["name"]
+    }
+    
+    return create_response(True, "Performance retrieved successfully", data)
+
+
+@api_router.get("/staff/my-complaints")
+async def get_my_complaints(current_user: dict = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    """Get detailed list of complaints assigned to the logged-in staff member"""
+    if current_user["role"] != UserRole.STAFF:
+        return create_response(False, "Permission denied. This endpoint is for staff only.", status_code=403)
+    
+    staff_id = current_user["id"]
+    
+    stmt = select(Complaint).where(Complaint.assigned_to == staff_id).order_by(Complaint.created_at.desc())
+    res = await session.execute(stmt)
+    complaints = res.scalars().all()
+    
+    def _to_response(c: Complaint):
+        # Get resolution outcome from last response or status
+        resolution_outcome = None
+        if c.status in [ComplaintStatus.RESOLVED, ComplaintStatus.REJECTED]:
+            resolution_outcome = c.status.replace("_", " ").title()
+            if c.responses and len(c.responses) > 0:
+                last_response = c.responses[-1]
+                if isinstance(last_response, dict) and "text" in last_response:
+                    resolution_outcome = last_response["text"][:100] + ("..." if len(last_response.get("text", "")) > 100 else "")
+        
+        return {
+            "id": c.id,
+            "title": c.title,
+            "description": c.description[:100] + "..." if len(c.description) > 100 else c.description,
+            "category": c.category,
+            "status": c.status,
+            "priority": c.priority,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+            "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+            "assigned_at": c.assigned_at.isoformat() if c.assigned_at else None,
+            "resolution_outcome": resolution_outcome,
+            "student_name": c.student_name if not c.is_anonymous else "Anonymous"
+        }
+    
+    return create_response(True, "Complaints retrieved successfully", [_to_response(c) for c in complaints])
+
+
+@api_router.get("/staff/report/export")
+async def export_staff_report(
+    format: str = "excel",
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Export staff performance report as PDF or Excel"""
+    if current_user["role"] != UserRole.STAFF:
+        return create_response(False, "Permission denied. This endpoint is for staff only.", status_code=403)
+    
+    staff_id = current_user["id"]
+    staff_name = current_user["name"]
+    
+    # Get complaints
+    stmt = select(Complaint).where(Complaint.assigned_to == staff_id).order_by(Complaint.created_at.desc())
+    res = await session.execute(stmt)
+    complaints = res.scalars().all()
+    
+    # Get stats
+    total = len(complaints)
+    resolved = sum(1 for c in complaints if c.status == ComplaintStatus.RESOLVED)
+    rejected = sum(1 for c in complaints if c.status == ComplaintStatus.REJECTED)
+    pending = total - resolved - rejected
+    
+    if format.lower() == "excel":
+        try:
+            import openpyxl
+            from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+            from fastapi.responses import Response
+            
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Performance Report"
+            
+            # Header styling
+            header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+            header_font = Font(bold=True, color="FFFFFF")
+            thin_border = Border(
+                left=Side(style='thin'),
+                right=Side(style='thin'),
+                top=Side(style='thin'),
+                bottom=Side(style='thin')
+            )
+            
+            # Title
+            ws.merge_cells('A1:G1')
+            ws['A1'] = f"Performance Report - {staff_name}"
+            ws['A1'].font = Font(bold=True, size=16)
+            ws['A1'].alignment = Alignment(horizontal='center')
+            
+            # Summary section
+            ws['A3'] = "Summary Statistics"
+            ws['A3'].font = Font(bold=True, size=12)
+            ws['A4'] = "Total Assigned:"
+            ws['B4'] = total
+            ws['A5'] = "Resolved:"
+            ws['B5'] = resolved
+            ws['A6'] = "Rejected:"
+            ws['B6'] = rejected
+            ws['A7'] = "Pending:"
+            ws['B7'] = pending
+            ws['A8'] = "Resolution Rate:"
+            ws['B8'] = f"{round((resolved / total * 100) if total > 0 else 0, 1)}%"
+            
+            # Complaints table header
+            headers = ["Complaint ID", "Title", "Category", "Status", "Priority", "Date", "Resolution"]
+            for col, header in enumerate(headers, 1):
+                cell = ws.cell(row=10, column=col, value=header)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.border = thin_border
+                cell.alignment = Alignment(horizontal='center')
+            
+            # Complaints data
+            for row_idx, c in enumerate(complaints, 11):
+                resolution = ""
+                if c.status in [ComplaintStatus.RESOLVED, ComplaintStatus.REJECTED]:
+                    resolution = c.status.replace("_", " ").title()
+                
+                data = [
+                    c.id[:8] + "...",
+                    c.title[:30] + ("..." if len(c.title) > 30 else ""),
+                    c.category or "N/A",
+                    c.status.replace("_", " ").title(),
+                    c.priority or "N/A",
+                    c.created_at.strftime("%Y-%m-%d") if c.created_at else "N/A",
+                    resolution
+                ]
+                for col, value in enumerate(data, 1):
+                    cell = ws.cell(row=row_idx, column=col, value=value)
+                    cell.border = thin_border
+            
+            # Adjust column widths
+            ws.column_dimensions['A'].width = 15
+            ws.column_dimensions['B'].width = 35
+            ws.column_dimensions['C'].width = 15
+            ws.column_dimensions['D'].width = 15
+            ws.column_dimensions['E'].width = 10
+            ws.column_dimensions['F'].width = 12
+            ws.column_dimensions['G'].width = 15
+            
+            # Save to bytes
+            output = io.BytesIO()
+            wb.save(output)
+            output.seek(0)
+            
+            return Response(
+                content=output.getvalue(),
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={
+                    "Content-Disposition": f"attachment; filename=performance_report_{staff_id[:8]}.xlsx"
+                }
+            )
+        except ImportError:
+            return create_response(False, "Excel export not available. Please install openpyxl.", status_code=500)
+    
+    elif format.lower() == "pdf":
+        try:
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import letter, landscape
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from fastapi.responses import Response
+            
+            output = io.BytesIO()
+            doc = SimpleDocTemplate(output, pagesize=landscape(letter))
+            styles = getSampleStyleSheet()
+            elements = []
+            
+            # Title
+            title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=18, alignment=1)
+            elements.append(Paragraph(f"Performance Report - {staff_name}", title_style))
+            elements.append(Spacer(1, 20))
+            
+            # Summary
+            summary_data = [
+                ["Total Assigned", str(total)],
+                ["Resolved", str(resolved)],
+                ["Rejected", str(rejected)],
+                ["Pending", str(pending)],
+                ["Resolution Rate", f"{round((resolved / total * 100) if total > 0 else 0, 1)}%"]
+            ]
+            summary_table = Table(summary_data, colWidths=[150, 100])
+            summary_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ]))
+            elements.append(summary_table)
+            elements.append(Spacer(1, 30))
+            
+            # Complaints table
+            elements.append(Paragraph("Complaint Details", styles['Heading2']))
+            elements.append(Spacer(1, 10))
+            
+            table_data = [["ID", "Title", "Category", "Status", "Priority", "Date"]]
+            for c in complaints[:50]:  # Limit to 50 for PDF
+                table_data.append([
+                    c.id[:8] + "...",
+                    c.title[:25] + ("..." if len(c.title) > 25 else ""),
+                    c.category or "N/A",
+                    c.status.replace("_", " ").title(),
+                    c.priority or "N/A",
+                    c.created_at.strftime("%Y-%m-%d") if c.created_at else "N/A"
+                ])
+            
+            complaints_table = Table(table_data, colWidths=[80, 180, 100, 100, 80, 80])
+            complaints_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4472C4')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ]))
+            elements.append(complaints_table)
+            
+            doc.build(elements)
+            output.seek(0)
+            
+            return Response(
+                content=output.getvalue(),
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f"attachment; filename=performance_report_{staff_id[:8]}.pdf"
+                }
+            )
+        except ImportError:
+            return create_response(False, "PDF export not available. Please install reportlab.", status_code=500)
+    
+    else:
+        return create_response(False, "Invalid format. Use 'pdf' or 'excel'.", status_code=400)
+
+
 # Include router
 app.include_router(api_router)
 
