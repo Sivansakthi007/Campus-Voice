@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { Toaster } from "sonner"
 import { ThemeProvider } from "@/components/theme-provider"
+import { FooterWatermark } from "@/components/footer-watermark"
 import "./globals.css"
 
 const _geist = Geist({ subsets: ["latin"] })
@@ -47,6 +48,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           {children}
+          <FooterWatermark />
         </ThemeProvider>
         <Toaster position="top-right" richColors />
         <Analytics />

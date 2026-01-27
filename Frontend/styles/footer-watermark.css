@@ -1,0 +1,309 @@
+/* Footer Watermark Styles - Campus Voice */
+/* Premium animated footer with Uchiha-themed aesthetics */
+
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap');
+
+/* ========================================
+   Footer Watermark Container
+======================================== */
+.footer-watermark {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  padding: 1rem 1.5rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+  font-family: 'Poppins', sans-serif;
+}
+
+.footer-watermark__content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: auto;
+}
+
+/* ========================================
+   Main Footer Text
+======================================== */
+.footer-watermark__text {
+  color: #9CA3AF;
+  font-size: 0.875rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  opacity: 0.7;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  text-align: center;
+}
+
+.footer-watermark__developed {
+  color: #9CA3AF;
+}
+
+/* ========================================
+   Team Uchiha Trigger Button
+======================================== */
+.footer-watermark__trigger {
+  background: transparent;
+  border: none;
+  color: #9CA3AF;
+  font-family: 'Poppins', sans-serif;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0.125rem 0.375rem;
+  margin: 0 -0.375rem;
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 4px;
+}
+
+/* Underline effect */
+.footer-watermark__trigger::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 0;
+  height: 1.5px;
+  background: linear-gradient(90deg, #dc2626, #b91c1c);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translateX(-50%);
+  border-radius: 1px;
+}
+
+/* Hover states - Uchiha red glow */
+.footer-watermark__trigger:hover {
+  color: #fca5a5;
+  text-shadow: 
+    0 0 8px rgba(220, 38, 38, 0.4),
+    0 0 16px rgba(220, 38, 38, 0.2);
+}
+
+.footer-watermark__trigger:hover::after {
+  width: 100%;
+}
+
+/* Focus visible state */
+.footer-watermark__trigger:focus-visible {
+  outline: 2px solid rgba(220, 38, 38, 0.5);
+  outline-offset: 3px;
+}
+
+/* ========================================
+   Team Members Card (Glassmorphism)
+======================================== */
+.footer-watermark__team-card {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  margin-bottom: 0.75rem;
+  padding: 1rem 1.5rem;
+  min-width: 220px;
+  
+  /* Glassmorphism effect */
+  background: rgba(17, 17, 17, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  
+  /* Subtle shadow with red tint */
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(220, 38, 38, 0.05),
+    0 0 60px -10px rgba(220, 38, 38, 0.15);
+  
+  /* Hidden state */
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Visible state */
+.footer-watermark__team-card--visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Card header */
+.footer-watermark__team-header {
+  text-align: center;
+  margin-bottom: 0.75rem;
+}
+
+.footer-watermark__team-title {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.footer-watermark__team-divider {
+  height: 1px;
+  margin-top: 0.5rem;
+  background: linear-gradient(
+    90deg, 
+    transparent, 
+    rgba(220, 38, 38, 0.3), 
+    transparent
+  );
+}
+
+/* ========================================
+   Team Members List
+======================================== */
+.footer-watermark__team-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.footer-watermark__team-member {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: 0.9375rem;
+  font-weight: 400;
+  color: #e5e7eb;
+  padding: 0.375rem 0.5rem;
+  border-radius: 8px;
+  transition: all 0.25s ease;
+  
+  /* Animation initial state */
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+/* Member animation when card is visible */
+.footer-watermark__team-card--visible .footer-watermark__team-member {
+  animation: memberSlideIn 0.4s ease-out forwards;
+}
+
+@keyframes memberSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Member hover state */
+.footer-watermark__team-member:hover {
+  background: rgba(220, 38, 38, 0.1);
+  transform: translateX(4px);
+}
+
+/* Red dot indicator */
+.footer-watermark__member-dot {
+  width: 6px;
+  height: 6px;
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 6px rgba(220, 38, 38, 0.5);
+}
+
+/* ========================================
+   Light Theme Adjustments
+======================================== */
+:root:not(.dark) .footer-watermark__team-card,
+.light .footer-watermark__team-card {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.12),
+    0 0 0 1px rgba(220, 38, 38, 0.05),
+    0 0 60px -10px rgba(220, 38, 38, 0.1);
+}
+
+:root:not(.dark) .footer-watermark__team-member,
+.light .footer-watermark__team-member {
+  color: #374151;
+}
+
+:root:not(.dark) .footer-watermark__team-title,
+.light .footer-watermark__team-title {
+  color: #9ca3af;
+}
+
+/* ========================================
+   Mobile Responsive
+======================================== */
+@media (max-width: 640px) {
+  .footer-watermark {
+    padding: 0.75rem 1rem;
+  }
+
+  .footer-watermark__text {
+    font-size: 0.8125rem;
+  }
+
+  .footer-watermark__trigger {
+    font-size: 0.8125rem;
+  }
+
+  .footer-watermark__team-card {
+    min-width: 180px;
+    padding: 0.875rem 1.25rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .footer-watermark__team-member {
+    font-size: 0.875rem;
+  }
+}
+
+/* Extra small screens */
+@media (max-width: 400px) {
+  .footer-watermark__text {
+    font-size: 0.75rem;
+  }
+
+  .footer-watermark__trigger {
+    font-size: 0.75rem;
+  }
+
+  .footer-watermark__team-card {
+    min-width: 160px;
+  }
+}
+
+/* ========================================
+   Reduced Motion Preferences
+======================================== */
+@media (prefers-reduced-motion: reduce) {
+  .footer-watermark__trigger,
+  .footer-watermark__trigger::after,
+  .footer-watermark__team-card,
+  .footer-watermark__team-member {
+    transition: none;
+  }
+
+  .footer-watermark__team-card--visible .footer-watermark__team-member {
+    animation: none;
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
