@@ -65,10 +65,29 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup():
-    # initialize engine and create tables if they don't exist
-    engine = get_engine()
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    """Initialize database connection with retry logic for containerized environments."""
+    import asyncio
+    
+    max_retries = 5
+    retry_delay = 2  # Start with 2 seconds
+    
+    for attempt in range(1, max_retries + 1):
+        try:
+            logger.info(f"Attempting database connection (attempt {attempt}/{max_retries})...")
+            engine = get_engine()
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            logger.info("Database connection established successfully!")
+            return
+        except Exception as e:
+            logger.warning(f"Database connection attempt {attempt} failed: {str(e)}")
+            if attempt < max_retries:
+                wait_time = min(retry_delay * (2 ** (attempt - 1)), 32)  # Exponential backoff, max 32s
+                logger.info(f"Retrying in {wait_time} seconds...")
+                await asyncio.sleep(wait_time)
+            else:
+                logger.error("All database connection attempts failed!")
+                raise
 @app.get("/")
 async def root():
     return {"message": "Campus Voice API is running", "docs_url": "/docs"}

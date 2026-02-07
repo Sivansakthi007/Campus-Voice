@@ -25,14 +25,8 @@ services:
     dockerfilePath: ./Dockerfile.frontend
     envVars:
       - key: NEXT_PUBLIC_API_URL
-        fromService:
-          type: web
-          name: campus-voice-backend
-          property: url
+        sync: false  # Set to https://campus-voice-backend.onrender.com after backend deploys
       - key: BACKEND_URL
-        fromService:
-          type: web
-          name: campus-voice-backend
-          property: url
+        sync: false  # Set to https://campus-voice-backend.onrender.com after backend deploys
       - key: NODE_ENV
         value: production
