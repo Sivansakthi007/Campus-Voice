@@ -5,11 +5,11 @@ import type { UserRole } from "./constants"
 const API_BASE_URL = (() => {
   // Server-side rendering
   if (typeof window === 'undefined') {
-    return process.env.BACKEND_URL || "https://campus-voice-backend-8sn7.onrender.com";
+    return process.env.BACKEND_URL || "https://campus-voice-backend-82u6.onrender.com";
   }
 
   // Client-side (browser) - Use NEXT_PUBLIC_ env var or production URL
-  return process.env.NEXT_PUBLIC_API_URL || "https://campus-voice-backend-8sn7.onrender.com";
+  return process.env.NEXT_PUBLIC_API_URL || "https://campus-voice-backend-82u6.onrender.com";
 })();
 
 // Types for API responses

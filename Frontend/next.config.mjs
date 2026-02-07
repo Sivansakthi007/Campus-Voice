@@ -9,7 +9,7 @@ const nextConfig = {
   devIndicators: false,
   output: 'standalone',
   async rewrites() {
-    const backendUrl = process.env.BACKEND_URL || 'https://campus-voice-backend-8sn7.onrender.com';
+    const backendUrl = process.env.BACKEND_URL || 'https://campus-voice-backend-82u6.onrender.com';
     return [
       {
         source: '/api/:path*',
