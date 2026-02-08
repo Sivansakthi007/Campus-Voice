@@ -33,7 +33,7 @@ export function FooterWatermark() {
                         aria-expanded={isRevealed}
                         aria-label="Show team members"
                     >
-                        Team Uchiha
+                        Team R.S
                     </button>
                 </p>
 
