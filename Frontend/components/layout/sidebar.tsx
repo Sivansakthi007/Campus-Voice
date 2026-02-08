@@ -16,6 +16,8 @@ import {
   X,
   GraduationCap,
   FileSearch,
+  Star,
+  Trophy,
 } from "lucide-react"
 import { USER_ROLES, ROLE_COLORS, type UserRole } from "@/lib/constants"
 import { mockStorage } from "@/lib/mock-data"
@@ -31,6 +33,7 @@ const SIDEBAR_ITEMS = {
     { icon: FileText, label: "Submit Complaint", path: "/submit" },
     { icon: List, label: "My Complaints", path: "/complaints" },
     { icon: FileSearch, label: "Complaint Details", path: "/complaint-details" },
+    { icon: Star, label: "Weekly Staff Rating", path: "/weekly-staff-rating" },
     { icon: BarChart3, label: "Analytics", path: "/analytics" },
     { icon: Users, label: "Staff Report", path: "/staff-report" },
     { icon: User, label: "Profile", path: "/profile" },
@@ -49,6 +52,7 @@ const SIDEBAR_ITEMS = {
     { icon: List, label: "All Complaints", path: "/complaints" },
     { icon: FileSearch, label: "Complaint Details", path: "/complaint-details" },
     { icon: Users, label: "Staff Management", path: "/staff" },
+    { icon: Trophy, label: "Staff Performance", path: "/staff-performance-report" },
     { icon: BarChart3, label: "Analytics", path: "/analytics" },
     { icon: User, label: "Profile", path: "/profile" },
     { icon: Settings, label: "Settings", path: "/settings" },
@@ -129,11 +133,10 @@ export function Sidebar({ role }: SidebarProps) {
                 router.push(`/dashboard/${role}${item.path}`)
                 setIsMobileOpen(false)
               }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                active
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${active
                   ? `bg-gradient-to-r ${colors.gradient} text-white shadow-lg`
                   : "text-gray-400 hover:bg-white/5 hover:text-white"
-              }`}
+                }`}
             >
               <Icon className="w-5 h-5" />
               <span className="font-medium">{item.label}</span>

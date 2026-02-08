@@ -516,6 +516,138 @@ class ApiClient {
     return response.blob()
   }
 
+  // ===== STAFF RATING METHODS =====
+
+  async submitStaffRating(data: {
+    staff_id: string
+    subject_knowledge: number
+    teaching_clarity: number
+    student_interaction: number
+    punctuality: number
+    overall_effectiveness: number
+  }): Promise<{ id: string; staff_name: string; week_number: number; year: number; average_rating: number }> {
+    const response = await this.request<{
+      id: string
+      staff_name: string
+      week_number: number
+      year: number
+      average_rating: number
+    }>("/api/ratings", {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+    return response.data
+  }
+
+  async getStaffForRating(): Promise<{
+    staff: Array<{ id: string; name: string; department: string | null; already_rated_this_week: boolean }>
+    week_number: number
+    year: number
+  }> {
+    const response = await this.request<{
+      staff: Array<{ id: string; name: string; department: string | null; already_rated_this_week: boolean }>
+      week_number: number
+      year: number
+    }>("/api/ratings/staff-list")
+    return response.data
+  }
+
+  async getMyStaffRatings(): Promise<{
+    ratings: Array<{
+      id: string
+      staff_id: string
+      staff_name: string
+      subject_knowledge: number
+      teaching_clarity: number
+      student_interaction: number
+      punctuality: number
+      overall_effectiveness: number
+      average_rating: number
+      created_at: string
+    }>
+    week_number: number
+    year: number
+    week_start: string
+    week_end: string
+  }> {
+    const response = await this.request<{
+      ratings: Array<{
+        id: string
+        staff_id: string
+        staff_name: string
+        subject_knowledge: number
+        teaching_clarity: number
+        student_interaction: number
+        punctuality: number
+        overall_effectiveness: number
+        average_rating: number
+        created_at: string
+      }>
+      week_number: number
+      year: number
+      week_start: string
+      week_end: string
+    }>("/api/ratings/my-ratings")
+    return response.data
+  }
+
+  async getWeeklyStaffPerformance(week?: number, year?: number): Promise<{
+    week_number: number
+    year: number
+    week_start: string
+    week_end: string
+    staff_performance: Array<{
+      staff_id: string
+      staff_name: string
+      department: string | null
+      average_rating: number
+      total_ratings: number
+      is_best_staff: boolean
+    }>
+    total_ratings: number
+  }> {
+    let qs = ""
+    if (week) qs += `?week=${week}`
+    if (year) qs += `${qs ? "&" : "?"}year=${year}`
+
+    const response = await this.request<{
+      week_number: number
+      year: number
+      week_start: string
+      week_end: string
+      staff_performance: Array<{
+        staff_id: string
+        staff_name: string
+        department: string | null
+        average_rating: number
+        total_ratings: number
+        is_best_staff: boolean
+      }>
+      total_ratings: number
+    }>(`/api/ratings/weekly-report${qs}`)
+    return response.data
+  }
+
+  async downloadWeeklyPerformancePDF(week?: number, year?: number): Promise<Blob> {
+    let qs = ""
+    if (week) qs += `?week=${week}`
+    if (year) qs += `${qs ? "&" : "?"}year=${year}`
+
+    const url = `${this.baseURL}/api/ratings/weekly-report/pdf${qs}`
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+      },
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Download failed' }))
+      throw new Error(error.message || 'Download failed')
+    }
+
+    return response.blob()
+  }
+
   // Token management
   setToken(token: string | null) {
     this.token = token

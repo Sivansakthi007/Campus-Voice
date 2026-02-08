@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, JSON
+from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, JSON, UniqueConstraint
 from sqlalchemy.sql import func
 from db import Base
 import uuid
@@ -47,3 +47,27 @@ class Complaint(Base):
     assigned_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class StaffRating(Base):
+    """Weekly staff performance rating submitted by students."""
+    __tablename__ = "staff_ratings"
+    __table_args__ = (
+        UniqueConstraint('student_id', 'staff_id', 'week_number', 'year', 
+                        name='uq_student_staff_week_rating'),
+    )
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    student_id = Column(String(36), nullable=False, index=True)
+    staff_id = Column(String(36), nullable=False, index=True)
+    week_number = Column(Integer, nullable=False)  # ISO week number (1-53)
+    year = Column(Integer, nullable=False)
+    
+    # Rating criteria (1-5 stars)
+    subject_knowledge = Column(Integer, nullable=False)
+    teaching_clarity = Column(Integer, nullable=False)
+    student_interaction = Column(Integer, nullable=False)
+    punctuality = Column(Integer, nullable=False)
+    overall_effectiveness = Column(Integer, nullable=False)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

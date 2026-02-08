@@ -10,7 +10,7 @@ from pathlib import Path
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_engine, get_session, Base
-from models import User, Complaint
+from models import User, Complaint, StaffRating
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Dict, Any
 from enum import Enum
@@ -222,6 +222,49 @@ class StaffPerformance(BaseModel):
     resolved_complaints: int
     pending_complaints: int
     avg_resolution_time: float
+
+# Staff Rating Models
+class StaffRatingCreate(BaseModel):
+    """Request model for submitting a staff rating."""
+    staff_id: str
+    subject_knowledge: int = Field(..., ge=1, le=5)
+    teaching_clarity: int = Field(..., ge=1, le=5)
+    student_interaction: int = Field(..., ge=1, le=5)
+    punctuality: int = Field(..., ge=1, le=5)
+    overall_effectiveness: int = Field(..., ge=1, le=5)
+
+class StaffRatingResponse(BaseModel):
+    """Response model for a staff rating."""
+    id: str
+    staff_id: str
+    staff_name: str
+    week_number: int
+    year: int
+    subject_knowledge: int
+    teaching_clarity: int
+    student_interaction: int
+    punctuality: int
+    overall_effectiveness: int
+    average_rating: float
+    created_at: str
+
+class StaffPerformanceRating(BaseModel):
+    """Staff performance data for HOD weekly report."""
+    staff_id: str
+    staff_name: str
+    department: Optional[str]
+    average_rating: float
+    total_ratings: int
+    is_best_staff: bool = False
+
+class WeeklyPerformanceReport(BaseModel):
+    """Weekly staff performance report for HOD."""
+    week_number: int
+    year: int
+    week_start: str
+    week_end: str
+    staff_performance: List[StaffPerformanceRating]
+    total_ratings: int
 
 # ===== HELPER FUNCTIONS =====
 def create_response(success: bool, message: str, data: Any = None, status_code: int = 200) -> JSONResponse:
@@ -1437,6 +1480,421 @@ async def export_staff_report(
     
     else:
         return create_response(False, "Invalid format. Use 'pdf' or 'excel'.", status_code=400)
+
+
+# ===== STAFF RATING ENDPOINTS =====
+
+def get_current_week_info():
+    """Get current ISO week number, year, and week date range."""
+    now = datetime.now(timezone.utc)
+    week_number = now.isocalendar()[1]
+    year = now.isocalendar()[0]
+    # Calculate week start (Monday) and end (Sunday)
+    week_start = now - timedelta(days=now.weekday())
+    week_end = week_start + timedelta(days=6)
+    return week_number, year, week_start, week_end
+
+
+@api_router.post("/ratings")
+async def submit_staff_rating(
+    rating_data: StaffRatingCreate,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Submit a staff performance rating (Student only, once per staff per week)."""
+    # Only students can submit ratings
+    if current_user["role"] != UserRole.STUDENT:
+        return create_response(False, "Only students can submit staff ratings", status_code=403)
+    
+    # Verify staff exists
+    staff = await session.get(User, rating_data.staff_id)
+    if not staff or staff.role != UserRole.STAFF:
+        return create_response(False, "Staff member not found", status_code=404)
+    
+    # Get current week info
+    week_number, year, _, _ = get_current_week_info()
+    
+    # Check for duplicate rating this week
+    stmt = select(StaffRating).where(
+        StaffRating.student_id == current_user["id"],
+        StaffRating.staff_id == rating_data.staff_id,
+        StaffRating.week_number == week_number,
+        StaffRating.year == year
+    )
+    result = await session.execute(stmt)
+    existing = result.scalars().first()
+    
+    if existing:
+        return create_response(
+            False, 
+            f"You have already rated this staff member this week. You can rate them again next week.",
+            status_code=400
+        )
+    
+    # Create rating
+    new_rating = StaffRating(
+        student_id=current_user["id"],
+        staff_id=rating_data.staff_id,
+        week_number=week_number,
+        year=year,
+        subject_knowledge=rating_data.subject_knowledge,
+        teaching_clarity=rating_data.teaching_clarity,
+        student_interaction=rating_data.student_interaction,
+        punctuality=rating_data.punctuality,
+        overall_effectiveness=rating_data.overall_effectiveness
+    )
+    
+    session.add(new_rating)
+    await session.commit()
+    await session.refresh(new_rating)
+    
+    logger.info(f"Staff rating submitted: student={current_user['id']}, staff={rating_data.staff_id}, week={week_number}")
+    
+    avg_rating = (
+        new_rating.subject_knowledge + 
+        new_rating.teaching_clarity + 
+        new_rating.student_interaction + 
+        new_rating.punctuality + 
+        new_rating.overall_effectiveness
+    ) / 5.0
+    
+    return create_response(True, "Rating submitted successfully", {
+        "id": new_rating.id,
+        "staff_name": staff.name,
+        "week_number": week_number,
+        "year": year,
+        "average_rating": round(avg_rating, 2)
+    })
+
+
+@api_router.get("/ratings/staff-list")
+async def get_staff_for_rating(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get list of registered staff members available for rating."""
+    # Only students can access this
+    if current_user["role"] != UserRole.STUDENT:
+        return create_response(False, "Only students can access staff list for rating", status_code=403)
+    
+    # Get all staff members
+    stmt = select(User).where(User.role == UserRole.STAFF)
+    result = await session.execute(stmt)
+    staff_list = result.scalars().all()
+    
+    # Get current week's ratings by this student
+    week_number, year, _, _ = get_current_week_info()
+    rated_stmt = select(StaffRating.staff_id).where(
+        StaffRating.student_id == current_user["id"],
+        StaffRating.week_number == week_number,
+        StaffRating.year == year
+    )
+    rated_result = await session.execute(rated_stmt)
+    rated_staff_ids = set(r[0] for r in rated_result.all())
+    
+    staff_data = []
+    for staff in staff_list:
+        staff_data.append({
+            "id": staff.id,
+            "name": staff.name,
+            "department": staff.department,
+            "already_rated_this_week": staff.id in rated_staff_ids
+        })
+    
+    return create_response(True, "Staff list retrieved successfully", {
+        "staff": staff_data,
+        "week_number": week_number,
+        "year": year
+    })
+
+
+@api_router.get("/ratings/my-ratings")
+async def get_my_staff_ratings(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get current student's submitted ratings for this week."""
+    if current_user["role"] != UserRole.STUDENT:
+        return create_response(False, "Only students can view their ratings", status_code=403)
+    
+    week_number, year, week_start, week_end = get_current_week_info()
+    
+    # Get this student's ratings for current week, joined with staff names
+    stmt = select(StaffRating, User.name.label("staff_name")).join(
+        User, StaffRating.staff_id == User.id
+    ).where(
+        StaffRating.student_id == current_user["id"],
+        StaffRating.week_number == week_number,
+        StaffRating.year == year
+    ).order_by(StaffRating.created_at.desc())
+    
+    result = await session.execute(stmt)
+    ratings = result.all()
+    
+    ratings_data = []
+    for rating, staff_name in ratings:
+        avg = (
+            rating.subject_knowledge + 
+            rating.teaching_clarity + 
+            rating.student_interaction + 
+            rating.punctuality + 
+            rating.overall_effectiveness
+        ) / 5.0
+        
+        ratings_data.append({
+            "id": rating.id,
+            "staff_id": rating.staff_id,
+            "staff_name": staff_name,
+            "subject_knowledge": rating.subject_knowledge,
+            "teaching_clarity": rating.teaching_clarity,
+            "student_interaction": rating.student_interaction,
+            "punctuality": rating.punctuality,
+            "overall_effectiveness": rating.overall_effectiveness,
+            "average_rating": round(avg, 2),
+            "created_at": rating.created_at.isoformat() if rating.created_at else None
+        })
+    
+    return create_response(True, "Your ratings retrieved successfully", {
+        "ratings": ratings_data,
+        "week_number": week_number,
+        "year": year,
+        "week_start": week_start.strftime("%Y-%m-%d"),
+        "week_end": week_end.strftime("%Y-%m-%d")
+    })
+
+
+@api_router.get("/ratings/weekly-report")
+async def get_weekly_staff_performance(
+    week: Optional[int] = None,
+    year: Optional[int] = None,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get weekly staff performance report (HOD/Principal/Admin only)."""
+    if current_user["role"] not in [UserRole.HOD, UserRole.PRINCIPAL, UserRole.ADMIN]:
+        return create_response(False, "Only HOD, Principal, or Admin can access performance reports", status_code=403)
+    
+    # Use current week if not specified
+    current_week, current_year, week_start, week_end = get_current_week_info()
+    target_week = week if week else current_week
+    target_year = year if year else current_year
+    
+    # Calculate week date range for target week
+    if week or year:
+        # Calculate the first day of the target week
+        jan1 = datetime(target_year, 1, 1, tzinfo=timezone.utc)
+        # Find the first Monday of the year
+        days_to_monday = (7 - jan1.weekday()) % 7
+        first_monday = jan1 + timedelta(days=days_to_monday)
+        # Calculate target week start
+        week_start = first_monday + timedelta(weeks=target_week - 1)
+        week_end = week_start + timedelta(days=6)
+    
+    # Get all ratings for the week
+    stmt = select(
+        StaffRating.staff_id,
+        User.name.label("staff_name"),
+        User.department,
+        func.avg(
+            (StaffRating.subject_knowledge + 
+             StaffRating.teaching_clarity + 
+             StaffRating.student_interaction + 
+             StaffRating.punctuality + 
+             StaffRating.overall_effectiveness) / 5.0
+        ).label("avg_rating"),
+        func.count(StaffRating.id).label("total_ratings")
+    ).join(
+        User, StaffRating.staff_id == User.id
+    ).where(
+        StaffRating.week_number == target_week,
+        StaffRating.year == target_year
+    ).group_by(
+        StaffRating.staff_id, User.name, User.department
+    ).order_by(
+        func.avg(
+            (StaffRating.subject_knowledge + 
+             StaffRating.teaching_clarity + 
+             StaffRating.student_interaction + 
+             StaffRating.punctuality + 
+             StaffRating.overall_effectiveness) / 5.0
+        ).desc()
+    )
+    
+    result = await session.execute(stmt)
+    staff_performance = result.all()
+    
+    # Build response with "Best Staff" badge for top performer
+    performance_data = []
+    total_ratings = 0
+    
+    for idx, row in enumerate(staff_performance):
+        total_ratings += row.total_ratings
+        performance_data.append({
+            "staff_id": row.staff_id,
+            "staff_name": row.staff_name,
+            "department": row.department,
+            "average_rating": round(float(row.avg_rating), 2),
+            "total_ratings": row.total_ratings,
+            "is_best_staff": idx == 0  # First one (highest rating) is best staff
+        })
+    
+    return create_response(True, "Weekly performance report retrieved", {
+        "week_number": target_week,
+        "year": target_year,
+        "week_start": week_start.strftime("%Y-%m-%d"),
+        "week_end": week_end.strftime("%Y-%m-%d"),
+        "staff_performance": performance_data,
+        "total_ratings": total_ratings
+    })
+
+
+@api_router.get("/ratings/weekly-report/pdf")
+async def download_weekly_performance_pdf(
+    week: Optional[int] = None,
+    year: Optional[int] = None,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Download weekly staff performance report as PDF (HOD/Principal/Admin only)."""
+    from fastapi.responses import Response
+    
+    if current_user["role"] not in [UserRole.HOD, UserRole.PRINCIPAL, UserRole.ADMIN]:
+        return create_response(False, "Only HOD, Principal, or Admin can download reports", status_code=403)
+    
+    # Use current week if not specified
+    current_week, current_year, week_start, week_end = get_current_week_info()
+    target_week = week if week else current_week
+    target_year = year if year else current_year
+    
+    # Calculate week date range
+    if week or year:
+        jan1 = datetime(target_year, 1, 1, tzinfo=timezone.utc)
+        days_to_monday = (7 - jan1.weekday()) % 7
+        first_monday = jan1 + timedelta(days=days_to_monday)
+        week_start = first_monday + timedelta(weeks=target_week - 1)
+        week_end = week_start + timedelta(days=6)
+    
+    # Get performance data
+    stmt = select(
+        StaffRating.staff_id,
+        User.name.label("staff_name"),
+        User.department,
+        func.avg(
+            (StaffRating.subject_knowledge + 
+             StaffRating.teaching_clarity + 
+             StaffRating.student_interaction + 
+             StaffRating.punctuality + 
+             StaffRating.overall_effectiveness) / 5.0
+        ).label("avg_rating"),
+        func.count(StaffRating.id).label("total_ratings")
+    ).join(
+        User, StaffRating.staff_id == User.id
+    ).where(
+        StaffRating.week_number == target_week,
+        StaffRating.year == target_year
+    ).group_by(
+        StaffRating.staff_id, User.name, User.department
+    ).order_by(
+        func.avg(
+            (StaffRating.subject_knowledge + 
+             StaffRating.teaching_clarity + 
+             StaffRating.student_interaction + 
+             StaffRating.punctuality + 
+             StaffRating.overall_effectiveness) / 5.0
+        ).desc()
+    )
+    
+    result = await session.execute(stmt)
+    staff_performance = result.all()
+    
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        
+        output = io.BytesIO()
+        doc = SimpleDocTemplate(output, pagesize=A4, topMargin=0.5*inch, bottomMargin=0.5*inch)
+        styles = getSampleStyleSheet()
+        elements = []
+        
+        # Title
+        title_style = ParagraphStyle('Title', parent=styles['Title'], fontSize=20, textColor=colors.HexColor('#1a365d'))
+        elements.append(Paragraph("Weekly Staff Performance Report", title_style))
+        elements.append(Spacer(1, 10))
+        
+        # Report info
+        elements.append(Paragraph(f"<b>Week:</b> {target_week} of {target_year}", styles['Normal']))
+        elements.append(Paragraph(f"<b>Period:</b> {week_start.strftime('%B %d, %Y')} - {week_end.strftime('%B %d, %Y')}", styles['Normal']))
+        elements.append(Paragraph(f"<b>Generated:</b> {datetime.now(timezone.utc).strftime('%B %d, %Y at %H:%M UTC')}", styles['Normal']))
+        elements.append(Paragraph(f"<b>Generated by:</b> {current_user['name']} ({current_user['role'].upper()})", styles['Normal']))
+        elements.append(Spacer(1, 20))
+        
+        if staff_performance:
+            # Summary
+            total = len(staff_performance)
+            total_ratings = sum(row.total_ratings for row in staff_performance)
+            elements.append(Paragraph(f"<b>Total Staff Rated:</b> {total}", styles['Normal']))
+            elements.append(Paragraph(f"<b>Total Ratings Received:</b> {total_ratings}", styles['Normal']))
+            elements.append(Spacer(1, 15))
+            
+            # Best Staff Highlight
+            best = staff_performance[0]
+            highlight_style = ParagraphStyle('Highlight', parent=styles['Normal'], 
+                                            fontSize=12, textColor=colors.HexColor('#065f46'),
+                                            backColor=colors.HexColor('#d1fae5'), borderPadding=10)
+            elements.append(Paragraph(
+                f"⭐ <b>Best Staff of the Week:</b> {best.staff_name} (Avg Rating: {round(float(best.avg_rating), 2)}/5.0)",
+                highlight_style
+            ))
+            elements.append(Spacer(1, 20))
+            
+            # Performance Table
+            elements.append(Paragraph("<b>Staff Performance Rankings</b>", styles['Heading2']))
+            elements.append(Spacer(1, 10))
+            
+            table_data = [["Rank", "Staff Name", "Department", "Avg Rating", "Total Ratings", "Badge"]]
+            for idx, row in enumerate(staff_performance):
+                badge = "⭐ Best Staff" if idx == 0 else ""
+                table_data.append([
+                    str(idx + 1),
+                    row.staff_name,
+                    row.department or "N/A",
+                    f"{round(float(row.avg_rating), 2)}/5.0",
+                    str(row.total_ratings),
+                    badge
+                ])
+            
+            perf_table = Table(table_data, colWidths=[40, 120, 100, 80, 80, 80])
+            perf_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4472C4')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#d1fae5')),  # Highlight best staff row
+            ]))
+            elements.append(perf_table)
+        else:
+            elements.append(Paragraph("No ratings submitted for this week.", styles['Normal']))
+        
+        elements.append(Spacer(1, 30))
+        elements.append(Paragraph("--- End of Report ---", styles['Normal']))
+        
+        doc.build(elements)
+        output.seek(0)
+        
+        filename = f"staff_performance_week{target_week}_{target_year}.pdf"
+        return Response(
+            content=output.getvalue(),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    except ImportError:
+        return create_response(False, "PDF export not available. Please install reportlab.", status_code=500)
 
 
 # Include router
