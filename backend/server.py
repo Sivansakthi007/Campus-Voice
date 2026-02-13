@@ -51,7 +51,7 @@ api_router = APIRouter(prefix="/api")
 
 # Add CORS middleware - Production Ready
 ALLOWED_ORIGINS = [
-    "https://campus-voice-frontend-8sn7.onrender.com",  # Production frontend
+    "https://campus-voice-frontend.onrender.com",  # Production frontend
     "http://localhost:3000",  # Local development
 ]
 
