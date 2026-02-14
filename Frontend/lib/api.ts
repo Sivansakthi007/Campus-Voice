@@ -648,6 +648,110 @@ class ApiClient {
     return response.blob()
   }
 
+  // ===== HOD SEMESTER EVALUATION METHODS =====
+
+  async getHODEvalToggle(): Promise<{ is_open: boolean; semester: number; year: number }> {
+    const response = await this.request<{ is_open: boolean; semester: number; year: number }>("/api/hod-eval/toggle")
+    return response.data
+  }
+
+  async setHODEvalToggle(isOpen: boolean): Promise<{ is_open: boolean; semester: number; year: number }> {
+    const response = await this.request<{ is_open: boolean; semester: number; year: number }>("/api/hod-eval/toggle", {
+      method: "POST",
+      body: JSON.stringify({ is_open: isOpen }),
+    })
+    return response.data
+  }
+
+  async getHODsForRating(): Promise<{
+    hods: Array<{ id: string; name: string; department: string | null; already_rated: boolean }>
+    semester: number
+    year: number
+  }> {
+    const response = await this.request<{
+      hods: Array<{ id: string; name: string; department: string | null; already_rated: boolean }>
+      semester: number
+      year: number
+    }>("/api/hod-eval/hods")
+    return response.data
+  }
+
+  async submitStudentHODRating(data: {
+    hod_id: string
+    approachability: number
+    academic_support: number
+    placement_guidance: number
+    internship_support: number
+    grievance_handling: number
+    event_organization: number
+    student_motivation: number
+    on_duty_permission: number
+  }): Promise<{ id: string; average_rating: number; semester: number; year: number }> {
+    const response = await this.request<{ id: string; average_rating: number; semester: number; year: number }>("/api/hod-eval/student-rating", {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+    return response.data
+  }
+
+  async submitStaffHODRating(data: {
+    hod_id: string
+    leadership: number
+    workload_fairness: number
+    staff_coordination: number
+    academic_monitoring: number
+    research_encouragement: number
+    university_communication: number
+    conflict_resolution: number
+    discipline_maintenance: number
+  }): Promise<{ id: string; average_rating: number; semester: number; year: number }> {
+    const response = await this.request<{ id: string; average_rating: number; semester: number; year: number }>("/api/hod-eval/staff-rating", {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+    return response.data
+  }
+
+  async getMyHODRating(): Promise<{
+    ratings: any[]
+    semester: number
+    year: number
+    has_submitted: boolean
+  }> {
+    const response = await this.request<{
+      ratings: any[]
+      semester: number
+      year: number
+      has_submitted: boolean
+    }>("/api/hod-eval/my-rating")
+    return response.data
+  }
+
+  async getHODEvalDashboard(semester?: number, year?: number): Promise<any> {
+    let qs = ""
+    if (semester) qs += `?semester=${semester}`
+    if (year) qs += `${qs ? "&" : "?"}year=${year}`
+    const response = await this.request<any>(`/api/hod-eval/dashboard${qs}`)
+    return response.data
+  }
+
+  async downloadHODReportPDF(semester?: number, year?: number): Promise<Blob> {
+    let qs = ""
+    if (semester) qs += `?semester=${semester}`
+    if (year) qs += `${qs ? "&" : "?"}year=${year}`
+    const url = `${this.baseURL}/api/hod-eval/report/pdf${qs}`
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+      },
+    })
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Download failed' }))
+      throw new Error(error.message || 'Download failed')
+    }
+    return response.blob()
+  }
+
   // Token management
   setToken(token: string | null) {
     this.token = token

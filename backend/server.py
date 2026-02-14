@@ -10,7 +10,7 @@ from pathlib import Path
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_engine, get_session, Base
-from models import User, Complaint, StaffRating
+from models import User, Complaint, StaffRating, HODRating, HODReportToggle
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Dict, Any
 from enum import Enum
@@ -1895,6 +1895,671 @@ async def download_weekly_performance_pdf(
         
     except ImportError:
         return create_response(False, "PDF export not available. Please install reportlab.", status_code=500)
+
+
+# ===== HOD SEMESTER EVALUATION ENDPOINTS =====
+
+# Helper: get current semester (1=Odd: Jul-Dec, 2=Even: Jan-Jun)
+def get_current_semester():
+    from datetime import datetime
+    now = datetime.now()
+    month = now.month
+    if month >= 7:  # Jul-Dec = Odd semester
+        return 1, now.year
+    else:  # Jan-Jun = Even semester
+        return 2, now.year
+
+# Pydantic models for HOD evaluation
+class StudentHODRatingCreate(BaseModel):
+    hod_id: str
+    approachability: int = Field(..., ge=1, le=5)
+    academic_support: int = Field(..., ge=1, le=5)
+    placement_guidance: int = Field(..., ge=1, le=5)
+    internship_support: int = Field(..., ge=1, le=5)
+    grievance_handling: int = Field(..., ge=1, le=5)
+    event_organization: int = Field(..., ge=1, le=5)
+    student_motivation: int = Field(..., ge=1, le=5)
+    on_duty_permission: int = Field(..., ge=1, le=5)
+
+class StaffHODRatingCreate(BaseModel):
+    hod_id: str
+    leadership: int = Field(..., ge=1, le=5)
+    workload_fairness: int = Field(..., ge=1, le=5)
+    staff_coordination: int = Field(..., ge=1, le=5)
+    academic_monitoring: int = Field(..., ge=1, le=5)
+    research_encouragement: int = Field(..., ge=1, le=5)
+    university_communication: int = Field(..., ge=1, le=5)
+    conflict_resolution: int = Field(..., ge=1, le=5)
+    discipline_maintenance: int = Field(..., ge=1, le=5)
+
+class HODToggleRequest(BaseModel):
+    is_open: bool
+
+
+@api_router.get("/hod-eval/toggle")
+async def get_hod_eval_toggle(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get the current HOD report toggle status."""
+    semester, year = get_current_semester()
+    stmt = select(HODReportToggle).where(
+        HODReportToggle.semester == semester,
+        HODReportToggle.year == year
+    )
+    result = await session.execute(stmt)
+    toggle = result.scalars().first()
+    return create_response(True, "Toggle status retrieved", {
+        "is_open": toggle.is_open if toggle else False,
+        "semester": semester,
+        "year": year
+    })
+
+
+@api_router.post("/hod-eval/toggle")
+async def set_hod_eval_toggle(
+    data: HODToggleRequest,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Set the HOD report toggle (Principal only)."""
+    if current_user["role"] != UserRole.PRINCIPAL:
+        raise HTTPException(status_code=403, detail="Only Principal can control the report toggle")
+    
+    semester, year = get_current_semester()
+    stmt = select(HODReportToggle).where(
+        HODReportToggle.semester == semester,
+        HODReportToggle.year == year
+    )
+    result = await session.execute(stmt)
+    toggle = result.scalars().first()
+    
+    if toggle:
+        toggle.is_open = data.is_open
+        toggle.updated_by = current_user["id"]
+    else:
+        toggle = HODReportToggle(
+            is_open=data.is_open,
+            semester=semester,
+            year=year,
+            updated_by=current_user["id"]
+        )
+        session.add(toggle)
+    
+    await session.commit()
+    status_text = "opened" if data.is_open else "closed"
+    return create_response(True, f"Report submission {status_text} successfully", {
+        "is_open": data.is_open,
+        "semester": semester,
+        "year": year
+    })
+
+
+@api_router.post("/hod-eval/student-rating")
+async def submit_student_hod_rating(
+    data: StudentHODRatingCreate,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Submit a student's HOD semester rating."""
+    if current_user["role"] != UserRole.STUDENT:
+        raise HTTPException(status_code=403, detail="Only students can submit student ratings")
+    
+    semester, year = get_current_semester()
+    
+    # Check toggle
+    toggle_stmt = select(HODReportToggle).where(
+        HODReportToggle.semester == semester,
+        HODReportToggle.year == year
+    )
+    toggle_result = await session.execute(toggle_stmt)
+    toggle = toggle_result.scalars().first()
+    if not toggle or not toggle.is_open:
+        raise HTTPException(status_code=403, detail="Report submission is currently closed by the Principal")
+    
+    # Verify HOD exists
+    hod = await session.get(User, data.hod_id)
+    if not hod or hod.role != UserRole.HOD:
+        raise HTTPException(status_code=404, detail="HOD not found")
+    
+    # Check for duplicate
+    dup_stmt = select(HODRating).where(
+        HODRating.rater_id == current_user["id"],
+        HODRating.hod_id == data.hod_id,
+        HODRating.semester == semester,
+        HODRating.year == year
+    )
+    dup_result = await session.execute(dup_stmt)
+    if dup_result.scalars().first():
+        raise HTTPException(status_code=400, detail="You have already submitted a rating for this HOD this semester")
+    
+    # Calculate average
+    values = [data.approachability, data.academic_support, data.placement_guidance,
+              data.internship_support, data.grievance_handling, data.event_organization,
+              data.student_motivation, data.on_duty_permission]
+    avg = round(sum(values) / len(values), 2)
+    
+    rating = HODRating(
+        rater_id=current_user["id"],
+        rater_role="student",
+        hod_id=data.hod_id,
+        semester=semester,
+        year=year,
+        department=current_user.get("department"),
+        approachability=data.approachability,
+        academic_support=data.academic_support,
+        placement_guidance=data.placement_guidance,
+        internship_support=data.internship_support,
+        grievance_handling=data.grievance_handling,
+        event_organization=data.event_organization,
+        student_motivation=data.student_motivation,
+        on_duty_permission=data.on_duty_permission,
+        average_rating=avg
+    )
+    session.add(rating)
+    await session.commit()
+    await session.refresh(rating)
+    
+    return create_response(True, "Student HOD rating submitted successfully", {
+        "id": rating.id,
+        "average_rating": avg,
+        "semester": semester,
+        "year": year
+    })
+
+
+@api_router.post("/hod-eval/staff-rating")
+async def submit_staff_hod_rating(
+    data: StaffHODRatingCreate,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Submit a staff member's HOD semester rating."""
+    if current_user["role"] != UserRole.STAFF:
+        raise HTTPException(status_code=403, detail="Only staff can submit staff ratings")
+    
+    semester, year = get_current_semester()
+    
+    # Check toggle
+    toggle_stmt = select(HODReportToggle).where(
+        HODReportToggle.semester == semester,
+        HODReportToggle.year == year
+    )
+    toggle_result = await session.execute(toggle_stmt)
+    toggle = toggle_result.scalars().first()
+    if not toggle or not toggle.is_open:
+        raise HTTPException(status_code=403, detail="Report submission is currently closed by the Principal")
+    
+    # Verify HOD exists
+    hod = await session.get(User, data.hod_id)
+    if not hod or hod.role != UserRole.HOD:
+        raise HTTPException(status_code=404, detail="HOD not found")
+    
+    # Check for duplicate
+    dup_stmt = select(HODRating).where(
+        HODRating.rater_id == current_user["id"],
+        HODRating.hod_id == data.hod_id,
+        HODRating.semester == semester,
+        HODRating.year == year
+    )
+    dup_result = await session.execute(dup_stmt)
+    if dup_result.scalars().first():
+        raise HTTPException(status_code=400, detail="You have already submitted a rating for this HOD this semester")
+    
+    # Calculate average
+    values = [data.leadership, data.workload_fairness, data.staff_coordination,
+              data.academic_monitoring, data.research_encouragement, data.university_communication,
+              data.conflict_resolution, data.discipline_maintenance]
+    avg = round(sum(values) / len(values), 2)
+    
+    rating = HODRating(
+        rater_id=current_user["id"],
+        rater_role="staff",
+        hod_id=data.hod_id,
+        semester=semester,
+        year=year,
+        department=current_user.get("department"),
+        leadership=data.leadership,
+        workload_fairness=data.workload_fairness,
+        staff_coordination=data.staff_coordination,
+        academic_monitoring=data.academic_monitoring,
+        research_encouragement=data.research_encouragement,
+        university_communication=data.university_communication,
+        conflict_resolution=data.conflict_resolution,
+        discipline_maintenance=data.discipline_maintenance,
+        average_rating=avg
+    )
+    session.add(rating)
+    await session.commit()
+    await session.refresh(rating)
+    
+    return create_response(True, "Staff HOD rating submitted successfully", {
+        "id": rating.id,
+        "average_rating": avg,
+        "semester": semester,
+        "year": year
+    })
+
+
+@api_router.get("/hod-eval/my-rating")
+async def get_my_hod_rating(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Check if the current user has already submitted an HOD rating this semester."""
+    semester, year = get_current_semester()
+    
+    stmt = select(HODRating).where(
+        HODRating.rater_id == current_user["id"],
+        HODRating.semester == semester,
+        HODRating.year == year
+    )
+    result = await session.execute(stmt)
+    ratings = result.scalars().all()
+    
+    rating_data = []
+    for r in ratings:
+        entry = {
+            "id": r.id,
+            "hod_id": r.hod_id,
+            "rater_role": r.rater_role,
+            "average_rating": r.average_rating,
+            "semester": r.semester,
+            "year": r.year,
+            "created_at": r.created_at.isoformat() if r.created_at else None
+        }
+        if r.rater_role == "student":
+            entry.update({
+                "approachability": r.approachability,
+                "academic_support": r.academic_support,
+                "placement_guidance": r.placement_guidance,
+                "internship_support": r.internship_support,
+                "grievance_handling": r.grievance_handling,
+                "event_organization": r.event_organization,
+                "student_motivation": r.student_motivation,
+                "on_duty_permission": r.on_duty_permission,
+            })
+        else:
+            entry.update({
+                "leadership": r.leadership,
+                "workload_fairness": r.workload_fairness,
+                "staff_coordination": r.staff_coordination,
+                "academic_monitoring": r.academic_monitoring,
+                "research_encouragement": r.research_encouragement,
+                "university_communication": r.university_communication,
+                "conflict_resolution": r.conflict_resolution,
+                "discipline_maintenance": r.discipline_maintenance,
+            })
+        rating_data.append(entry)
+    
+    return create_response(True, "My HOD ratings retrieved", {
+        "ratings": rating_data,
+        "semester": semester,
+        "year": year,
+        "has_submitted": len(rating_data) > 0
+    })
+
+
+@api_router.get("/hod-eval/dashboard")
+async def get_hod_eval_dashboard(
+    semester: Optional[int] = None,
+    year: Optional[int] = None,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get HOD performance dashboard data (Principal only)."""
+    if current_user["role"] != UserRole.PRINCIPAL:
+        raise HTTPException(status_code=403, detail="Only Principal can access the dashboard")
+    
+    if semester is None or year is None:
+        semester, year = get_current_semester()
+    
+    # Get all HODs
+    hod_stmt = select(User).where(User.role == UserRole.HOD)
+    hod_result = await session.execute(hod_stmt)
+    hods = hod_result.scalars().all()
+    
+    # Get all ratings for this semester
+    ratings_stmt = select(HODRating).where(
+        HODRating.semester == semester,
+        HODRating.year == year
+    )
+    ratings_result = await session.execute(ratings_stmt)
+    all_ratings = ratings_result.scalars().all()
+    
+    # Build per-HOD data
+    hod_performance = []
+    for hod in hods:
+        hod_ratings = [r for r in all_ratings if r.hod_id == hod.id]
+        student_ratings = [r for r in hod_ratings if r.rater_role == "student"]
+        staff_ratings = [r for r in hod_ratings if r.rater_role == "staff"]
+        
+        avg_student = round(sum(r.average_rating for r in student_ratings) / len(student_ratings), 2) if student_ratings else 0
+        avg_staff = round(sum(r.average_rating for r in staff_ratings) / len(staff_ratings), 2) if staff_ratings else 0
+        
+        # Overall = average of student avg and staff avg (only non-zero)
+        non_zero = [v for v in [avg_student, avg_staff] if v > 0]
+        overall = round(sum(non_zero) / len(non_zero), 2) if non_zero else 0
+        
+        # Determine performance category
+        if overall >= 4.5:
+            category = "Excellent"
+        elif overall >= 4.0:
+            category = "Very Good"
+        elif overall >= 3.0:
+            category = "Good"
+        else:
+            category = "Needs Improvement"
+        
+        # Good vs Bad counts for graphs
+        student_good = len([r for r in student_ratings if r.average_rating >= 4])
+        student_bad = len([r for r in student_ratings if r.average_rating < 4])
+        staff_good = len([r for r in staff_ratings if r.average_rating >= 4])
+        staff_bad = len([r for r in staff_ratings if r.average_rating < 4])
+        
+        # Per-criteria averages for student ratings
+        student_criteria_avg = {}
+        if student_ratings:
+            for field in ['approachability', 'academic_support', 'placement_guidance', 'internship_support',
+                          'grievance_handling', 'event_organization', 'student_motivation', 'on_duty_permission']:
+                vals = [getattr(r, field) for r in student_ratings if getattr(r, field) is not None]
+                student_criteria_avg[field] = round(sum(vals) / len(vals), 2) if vals else 0
+        
+        # Per-criteria averages for staff ratings
+        staff_criteria_avg = {}
+        if staff_ratings:
+            for field in ['leadership', 'workload_fairness', 'staff_coordination', 'academic_monitoring',
+                          'research_encouragement', 'university_communication', 'conflict_resolution', 'discipline_maintenance']:
+                vals = [getattr(r, field) for r in staff_ratings if getattr(r, field) is not None]
+                staff_criteria_avg[field] = round(sum(vals) / len(vals), 2) if vals else 0
+        
+        hod_performance.append({
+            "hod_id": hod.id,
+            "hod_name": hod.name,
+            "department": hod.department,
+            "total_student_ratings": len(student_ratings),
+            "total_staff_ratings": len(staff_ratings),
+            "avg_student_rating": avg_student,
+            "avg_staff_rating": avg_staff,
+            "overall_rating": overall,
+            "performance_category": category,
+            "student_good": student_good,
+            "student_bad": student_bad,
+            "staff_good": staff_good,
+            "staff_bad": staff_bad,
+            "student_criteria_avg": student_criteria_avg,
+            "staff_criteria_avg": staff_criteria_avg,
+        })
+    
+    # Sort by overall rating descending for ranking
+    hod_performance.sort(key=lambda x: x["overall_rating"], reverse=True)
+    
+    # Assign rank and best HOD badge
+    for i, h in enumerate(hod_performance):
+        h["rank"] = i + 1
+        h["is_best_hod"] = (i == 0 and h["overall_rating"] > 0)
+    
+    return create_response(True, "HOD evaluation dashboard data retrieved", {
+        "semester": semester,
+        "year": year,
+        "hod_performance": hod_performance,
+        "total_hods": len(hods),
+        "total_ratings": len(all_ratings)
+    })
+
+
+@api_router.get("/hod-eval/report/pdf")
+async def download_hod_report_pdf(
+    semester: Optional[int] = None,
+    year: Optional[int] = None,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Download HOD performance report as PDF (Principal only)."""
+    if current_user["role"] != UserRole.PRINCIPAL:
+        raise HTTPException(status_code=403, detail="Only Principal can download the report")
+    
+    if semester is None or year is None:
+        semester, year = get_current_semester()
+    
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        from fastapi.responses import Response
+        import io
+        
+        # Get dashboard data
+        hod_stmt = select(User).where(User.role == UserRole.HOD)
+        hod_result = await session.execute(hod_stmt)
+        hods = hod_result.scalars().all()
+        
+        ratings_stmt = select(HODRating).where(
+            HODRating.semester == semester,
+            HODRating.year == year
+        )
+        ratings_result = await session.execute(ratings_stmt)
+        all_ratings = ratings_result.scalars().all()
+        
+        output = io.BytesIO()
+        doc = SimpleDocTemplate(output, pagesize=A4,
+                                topMargin=0.5*inch, bottomMargin=0.5*inch,
+                                leftMargin=0.75*inch, rightMargin=0.75*inch)
+        styles = getSampleStyleSheet()
+        elements = []
+        
+        # Title
+        title_style = ParagraphStyle('CustomTitle', parent=styles['Title'],
+                                     fontSize=20, spaceAfter=20, textColor=colors.HexColor('#1a1a2e'))
+        elements.append(Paragraph("HOD Semester Performance Report", title_style))
+        
+        semester_name = "Odd Semester" if semester == 1 else "Even Semester"
+        elements.append(Paragraph(f"<b>Semester:</b> {semester_name} {year}", styles['Normal']))
+        elements.append(Paragraph(f"<b>Generated:</b> {datetime.now().strftime('%B %d, %Y')}", styles['Normal']))
+        elements.append(Spacer(1, 20))
+        
+        # Per HOD
+        for hod in hods:
+            hod_ratings = [r for r in all_ratings if r.hod_id == hod.id]
+            student_ratings = [r for r in hod_ratings if r.rater_role == "student"]
+            staff_ratings = [r for r in hod_ratings if r.rater_role == "staff"]
+            
+            avg_student = round(sum(r.average_rating for r in student_ratings) / len(student_ratings), 2) if student_ratings else 0
+            avg_staff = round(sum(r.average_rating for r in staff_ratings) / len(staff_ratings), 2) if staff_ratings else 0
+            non_zero = [v for v in [avg_student, avg_staff] if v > 0]
+            overall = round(sum(non_zero) / len(non_zero), 2) if non_zero else 0
+            
+            if overall >= 4.5:
+                category = "Excellent"
+            elif overall >= 4.0:
+                category = "Very Good"
+            elif overall >= 3.0:
+                category = "Good"
+            else:
+                category = "Needs Improvement"
+            
+            hod_style = ParagraphStyle('HODName', parent=styles['Heading2'],
+                                       fontSize=14, textColor=colors.HexColor('#2d3436'))
+            elements.append(Paragraph(f"{hod.name} — {hod.department or 'N/A'}", hod_style))
+            elements.append(Spacer(1, 8))
+            
+            # Summary table
+            summary_data = [
+                ["Metric", "Value"],
+                ["Student Ratings Count", str(len(student_ratings))],
+                ["Staff Ratings Count", str(len(staff_ratings))],
+                ["Avg Student Rating", f"{avg_student}/5"],
+                ["Avg Staff Rating", f"{avg_staff}/5"],
+                ["Overall Rating", f"{overall}/5"],
+                ["Performance Category", category],
+            ]
+            
+            t = Table(summary_data, colWidths=[3*inch, 2.5*inch])
+            t.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#6c5ce7')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+                ('TOPPADDING', (0, 0), (-1, 0), 10),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f8f9fa')),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#dee2e6')),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f1f3f5')]),
+            ]))
+            elements.append(t)
+            
+            # Student criteria breakdown if available
+            if student_ratings:
+                elements.append(Spacer(1, 10))
+                elements.append(Paragraph("Student Rating Breakdown:", styles['Heading4']))
+                criteria_labels = [
+                    ('approachability', 'Approachability'), ('academic_support', 'Academic Support'),
+                    ('placement_guidance', 'Placement Guidance'), ('internship_support', 'Internship Support'),
+                    ('grievance_handling', 'Grievance Handling'), ('event_organization', 'Event & Workshop Organization'),
+                    ('student_motivation', 'Student Motivation'), ('on_duty_permission', 'On Duty Permission')
+                ]
+                s_data = [["Criteria", "Average"]]
+                for field, label in criteria_labels:
+                    vals = [getattr(r, field) for r in student_ratings if getattr(r, field) is not None]
+                    avg_v = round(sum(vals)/len(vals), 2) if vals else 0
+                    s_data.append([label, f"{avg_v}/5"])
+                st = Table(s_data, colWidths=[3.5*inch, 2*inch])
+                st.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#00b894')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 9),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#dee2e6')),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f1f3f5')]),
+                ]))
+                elements.append(st)
+            
+            # Staff criteria breakdown if available
+            if staff_ratings:
+                elements.append(Spacer(1, 10))
+                elements.append(Paragraph("Staff Rating Breakdown:", styles['Heading4']))
+                criteria_labels = [
+                    ('leadership', 'Leadership & Decision Making'), ('workload_fairness', 'Workload Distribution Fairness'),
+                    ('staff_coordination', 'Staff Coordination'), ('academic_monitoring', 'Academic Monitoring'),
+                    ('research_encouragement', 'Research & FDP Encouragement'), ('university_communication', 'Communication with University'),
+                    ('conflict_resolution', 'Conflict Resolution'), ('discipline_maintenance', 'Discipline Maintenance')
+                ]
+                sf_data = [["Criteria", "Average"]]
+                for field, label in criteria_labels:
+                    vals = [getattr(r, field) for r in staff_ratings if getattr(r, field) is not None]
+                    avg_v = round(sum(vals)/len(vals), 2) if vals else 0
+                    sf_data.append([label, f"{avg_v}/5"])
+                sft = Table(sf_data, colWidths=[3.5*inch, 2*inch])
+                sft.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0984e3')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 9),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#dee2e6')),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f1f3f5')]),
+                ]))
+                elements.append(sft)
+            
+            elements.append(Spacer(1, 25))
+        
+        # Ranking section
+        if hods:
+            elements.append(Paragraph("HOD Performance Ranking", styles['Heading2']))
+            elements.append(Spacer(1, 8))
+            rank_data = [["Rank", "HOD Name", "Department", "Overall Rating", "Category"]]
+            
+            # Build ranking
+            ranked = []
+            for hod in hods:
+                hod_ratings = [r for r in all_ratings if r.hod_id == hod.id]
+                student_ratings = [r for r in hod_ratings if r.rater_role == "student"]
+                staff_ratings = [r for r in hod_ratings if r.rater_role == "staff"]
+                avg_s = round(sum(r.average_rating for r in student_ratings)/len(student_ratings), 2) if student_ratings else 0
+                avg_st = round(sum(r.average_rating for r in staff_ratings)/len(staff_ratings), 2) if staff_ratings else 0
+                non_zero = [v for v in [avg_s, avg_st] if v > 0]
+                ov = round(sum(non_zero)/len(non_zero), 2) if non_zero else 0
+                if ov >= 4.5: cat = "Excellent"
+                elif ov >= 4.0: cat = "Very Good"
+                elif ov >= 3.0: cat = "Good"
+                else: cat = "Needs Improvement"
+                ranked.append((hod.name, hod.department or "N/A", ov, cat))
+            
+            ranked.sort(key=lambda x: x[2], reverse=True)
+            for i, (name, dept, ov, cat) in enumerate(ranked):
+                badge = " 🏆" if i == 0 and ov > 0 else ""
+                rank_data.append([str(i+1), f"{name}{badge}", dept, f"{ov}/5", cat])
+            
+            rt = Table(rank_data, colWidths=[0.5*inch, 1.8*inch, 1.5*inch, 1*inch, 1.2*inch])
+            rt.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e17055')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#dee2e6')),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f1f3f5')]),
+            ]))
+            elements.append(rt)
+        
+        elements.append(Spacer(1, 30))
+        elements.append(Paragraph("--- End of Report ---", styles['Normal']))
+        
+        doc.build(elements)
+        output.seek(0)
+        
+        semester_label = "odd" if semester == 1 else "even"
+        filename = f"hod_performance_report_{semester_label}_{year}.pdf"
+        return Response(
+            content=output.getvalue(),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    except ImportError:
+        return create_response(False, "PDF export not available. Please install reportlab.", status_code=500)
+
+
+# HOD list for rating forms
+@api_router.get("/hod-eval/hods")
+async def get_hods_for_rating(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get list of HODs available for rating."""
+    hod_stmt = select(User).where(User.role == UserRole.HOD)
+    hod_result = await session.execute(hod_stmt)
+    hods = hod_result.scalars().all()
+    
+    semester, year = get_current_semester()
+    
+    hod_list = []
+    for hod in hods:
+        # Check if current user already rated this HOD
+        dup_stmt = select(HODRating).where(
+            HODRating.rater_id == current_user["id"],
+            HODRating.hod_id == hod.id,
+            HODRating.semester == semester,
+            HODRating.year == year
+        )
+        dup_result = await session.execute(dup_stmt)
+        already_rated = dup_result.scalars().first() is not None
+        
+        hod_list.append({
+            "id": hod.id,
+            "name": hod.name,
+            "department": hod.department,
+            "already_rated": already_rated
+        })
+    
+    return create_response(True, "HOD list retrieved", {
+        "hods": hod_list,
+        "semester": semester,
+        "year": year
+    })
 
 
 # Include router

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, JSON, UniqueConstraint
+from sqlalchemy import Column, String, Integer, Float, DateTime, Boolean, Text, JSON, UniqueConstraint
 from sqlalchemy.sql import func
 from db import Base
 import uuid
@@ -71,3 +71,55 @@ class StaffRating(Base):
     overall_effectiveness = Column(Integer, nullable=False)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class HODRating(Base):
+    """Semester-based HOD performance rating submitted by students or staff."""
+    __tablename__ = "hod_ratings"
+    __table_args__ = (
+        UniqueConstraint('rater_id', 'hod_id', 'semester', 'year',
+                        name='uq_rater_hod_semester_rating'),
+    )
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    rater_id = Column(String(36), nullable=False, index=True)
+    rater_role = Column(String(50), nullable=False)  # 'student' or 'staff'
+    hod_id = Column(String(36), nullable=False, index=True)
+    semester = Column(Integer, nullable=False)  # 1 = Odd, 2 = Even
+    year = Column(Integer, nullable=False)
+    department = Column(String(255), nullable=True)
+
+    # Student criteria (1-5 stars, nullable for staff submissions)
+    approachability = Column(Integer, nullable=True)
+    academic_support = Column(Integer, nullable=True)
+    placement_guidance = Column(Integer, nullable=True)
+    internship_support = Column(Integer, nullable=True)
+    grievance_handling = Column(Integer, nullable=True)
+    event_organization = Column(Integer, nullable=True)
+    student_motivation = Column(Integer, nullable=True)
+    on_duty_permission = Column(Integer, nullable=True)
+
+    # Staff criteria (1-5 stars, nullable for student submissions)
+    leadership = Column(Integer, nullable=True)
+    workload_fairness = Column(Integer, nullable=True)
+    staff_coordination = Column(Integer, nullable=True)
+    academic_monitoring = Column(Integer, nullable=True)
+    research_encouragement = Column(Integer, nullable=True)
+    university_communication = Column(Integer, nullable=True)
+    conflict_resolution = Column(Integer, nullable=True)
+    discipline_maintenance = Column(Integer, nullable=True)
+
+    average_rating = Column(Float, nullable=False, default=0.0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class HODReportToggle(Base):
+    """Controls whether HOD semester report submissions are open."""
+    __tablename__ = "hod_report_toggle"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    is_open = Column(Boolean, default=False, nullable=False)
+    semester = Column(Integer, nullable=False)
+    year = Column(Integer, nullable=False)
+    updated_by = Column(String(36), nullable=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
