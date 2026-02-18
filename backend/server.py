@@ -74,6 +74,9 @@ async def startup():
     If all attempts fail the server keeps running so non-DB endpoints (health, docs)
     still respond. DB-dependent endpoints will return 503."""
     import asyncio
+    from db import _mask_url, SQLALCHEMY_DATABASE_URL as db_url
+    
+    logger.info(f"Database URL: {_mask_url(db_url or 'NOT SET')}")
     
     max_retries = 5
     retry_delay = 2  # Start with 2 seconds
@@ -87,7 +90,7 @@ async def startup():
             logger.info("Database connection established successfully!")
             return
         except Exception as e:
-            logger.warning(f"Database connection attempt {attempt} failed: {str(e)}")
+            logger.warning(f"Database connection attempt {attempt} failed: {type(e).__name__}: {str(e)}")
             if attempt < max_retries:
                 wait_time = min(retry_delay * (2 ** (attempt - 1)), 32)
                 logger.info(f"Retrying in {wait_time} seconds...")
@@ -95,7 +98,8 @@ async def startup():
             else:
                 logger.error(
                     "All database connection attempts failed! "
-                    "Server will start anyway; DB endpoints will return 503."
+                    "Server will start anyway; DB endpoints will return 503. "
+                    f"Last error: {type(e).__name__}: {str(e)}"
                 )
 
 # NOTE: Structured exception handlers are registered at the bottom of this file
