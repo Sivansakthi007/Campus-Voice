@@ -18,6 +18,7 @@ import {
   ArrowLeft,
 } from "lucide-react"
 import { USER_ROLES, ROLE_COLORS, STAFF_ROLES, type UserRole } from "@/lib/constants"
+import { apiClient } from "@/lib/api"
 
 const ROLE_OPTIONS = [
   { value: USER_ROLES.STUDENT, label: "Student", icon: GraduationCap, description: "Submit and track complaints" },
@@ -67,41 +68,30 @@ export default function RegisterPage() {
     }
 
     try {
-      const response = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: formData.name,
-          email: formData.email,
-          password: formData.password,
-          role: selectedRole,
-          department: formData.department,
-          // Send as student_id for students, staff_id for other roles
-          ...(selectedRole === USER_ROLES.STUDENT
-            ? { student_id: formData.idNumber }
-            : { staff_id: formData.idNumber }),
-          ...(selectedRole === USER_ROLES.STAFF
-            ? { staff_role: formData.staffRole }
-            : {}),
-        }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        toast.error(data.detail || "Registration failed")
-        return
+      const registerData: any = {
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        role: selectedRole,
+        department: formData.department,
+        // Send as student_id for students, staff_id for other roles
+        ...(selectedRole === USER_ROLES.STUDENT
+          ? { student_id: formData.idNumber }
+          : { staff_id: formData.idNumber }),
+        ...(selectedRole === USER_ROLES.STAFF
+          ? { staff_role: formData.staffRole }
+          : {}),
       }
+
+      await apiClient.register(registerData)
 
       toast.success("Account created successfully!")
 
       setTimeout(() => {
         router.push(`/login?role=${selectedRole}`)
       }, 1000)
-    } catch (error) {
-      toast.error("Server error. Please try again")
+    } catch (error: any) {
+      toast.error(error?.message || "Registration failed. Please try again.")
     }
   }
 
