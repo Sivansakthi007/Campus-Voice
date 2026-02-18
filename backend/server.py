@@ -278,6 +278,24 @@ def create_response(success: bool, message: str, data: Any = None, status_code: 
         }
     )
 
+def _mask_anonymous_complaint(data: dict, viewer_role: str) -> dict:
+    """Mask student identity fields for anonymous complaints.
+    
+    Only Admin and Principal can see the real identity of anonymous complaints.
+    All other roles (Student viewing others, Staff, HOD) see masked data.
+    """
+    if not data.get("is_anonymous", False):
+        return data
+    # Admin and Principal can see everything
+    if viewer_role in (UserRole.ADMIN, UserRole.PRINCIPAL):
+        return data
+    # Mask identity for all other roles
+    data = dict(data)  # shallow copy to avoid mutating original
+    data["student_id"] = "anonymous"
+    data["student_name"] = "Anonymous Student"
+    data["student_email"] = None
+    return data
+
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
@@ -753,7 +771,7 @@ async def get_complaints(current_user: dict = Depends(get_current_user), session
     complaints = res.scalars().all()
 
     def _to_response(c: Complaint):
-        return {
+        data = {
             "id": c.id,
             "title": c.title,
             "description": c.description,
@@ -766,6 +784,7 @@ async def get_complaints(current_user: dict = Depends(get_current_user), session
             "is_anonymous": c.is_anonymous,
             "student_id": c.student_id,
             "student_name": c.student_name,
+            "student_email": c.student_email,
             "support_count": c.support_count,
             "assigned_to": c.assigned_to,
             "assigned_to_name": c.assigned_to_name,
@@ -775,6 +794,7 @@ async def get_complaints(current_user: dict = Depends(get_current_user), session
             "responses": c.responses,
             "timeline": c.timeline
         }
+        return _mask_anonymous_complaint(data, current_user["role"])
 
     return create_response(True, "Complaints retrieved successfully", [_to_response(c) for c in complaints])
 
@@ -784,30 +804,31 @@ async def get_complaint(complaint_id: str, current_user: dict = Depends(get_curr
     if not complaint:
         raise HTTPException(status_code=404, detail="Complaint not found")
 
-
-    return ComplaintResponse(
-        id=complaint.id,
-        title=complaint.title,
-        description=complaint.description,
-        status=complaint.status,
-        category=complaint.category,
-        priority=complaint.priority,
-        sentiment=complaint.sentiment,
-        foul_language_severity=complaint.foul_language_severity,
-        foul_language_detected=complaint.foul_language_detected,
-        is_anonymous=complaint.is_anonymous,
-        student_id=complaint.student_id,
-        student_name=complaint.student_name,
-        student_email=complaint.student_email,
-        support_count=complaint.support_count,
-        assigned_to=complaint.assigned_to,
-        assigned_to_name=complaint.assigned_to_name,
-        assigned_at=complaint.assigned_at.isoformat() if complaint.assigned_at else None,
-        created_at=complaint.created_at.isoformat() if complaint.created_at else None,
-        updated_at=complaint.updated_at.isoformat() if complaint.updated_at else None,
-        responses=complaint.responses,
-        timeline=complaint.timeline
-    )
+    data = {
+        "id": complaint.id,
+        "title": complaint.title,
+        "description": complaint.description,
+        "status": complaint.status,
+        "category": complaint.category,
+        "priority": complaint.priority,
+        "sentiment": complaint.sentiment,
+        "foul_language_severity": complaint.foul_language_severity,
+        "foul_language_detected": complaint.foul_language_detected,
+        "is_anonymous": complaint.is_anonymous,
+        "student_id": complaint.student_id,
+        "student_name": complaint.student_name,
+        "student_email": complaint.student_email,
+        "support_count": complaint.support_count,
+        "assigned_to": complaint.assigned_to,
+        "assigned_to_name": complaint.assigned_to_name,
+        "assigned_at": complaint.assigned_at.isoformat() if complaint.assigned_at else None,
+        "created_at": complaint.created_at.isoformat() if complaint.created_at else None,
+        "updated_at": complaint.updated_at.isoformat() if complaint.updated_at else None,
+        "responses": complaint.responses,
+        "timeline": complaint.timeline
+    }
+    masked = _mask_anonymous_complaint(data, current_user["role"])
+    return ComplaintResponse(**masked)
 
 @api_router.put("/complaints/{complaint_id}")
 async def update_complaint(complaint_id: str, update_data: ComplaintUpdate, current_user: dict = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
@@ -912,13 +933,15 @@ async def update_complaint(complaint_id: str, update_data: ComplaintUpdate, curr
         "is_anonymous": complaint_obj.is_anonymous,
         "student_id": complaint_obj.student_id,
         "student_name": complaint_obj.student_name,
+        "student_email": complaint_obj.student_email,
         "support_count": complaint_obj.support_count,
         "created_at": complaint_obj.created_at.isoformat() if complaint_obj.created_at else None,
         "updated_at": complaint_obj.updated_at.isoformat() if complaint_obj.updated_at else None,
         "responses": complaint_obj.responses,
         "timeline": complaint_obj.timeline
     }
-    return create_response(True, "Complaint updated successfully", data)
+    masked = _mask_anonymous_complaint(data, current_user["role"])
+    return create_response(True, "Complaint updated successfully", masked)
 
 @api_router.delete("/complaints/{complaint_id}")
 async def delete_complaint(complaint_id: str, confirm: bool = False, current_user: dict = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
