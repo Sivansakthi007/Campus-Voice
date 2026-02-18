@@ -33,7 +33,7 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # SQLAlchemy (MySQL) engine/session
-SQLALCHEMY_DATABASE_URL = os.environ.get('SQLALCHEMY_DATABASE_URL')
+SQLALCHEMY_DATABASE_URL = os.environ.get('SQLALCHEMY_DATABASE_URL') or os.environ.get('DATABASE_URL')
 
 # Security
 pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt"], deprecated="auto")
@@ -98,21 +98,9 @@ async def startup():
                     "Server will start anyway; DB endpoints will return 503."
                 )
 
-# Global handler: catch DB-related errors and return a clear 503
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    error_msg = str(exc)
-    if any(keyword in error_msg.lower() for keyword in ["database", "connection", "mysql", "asyncmy", "sqlalchemy", "operational"]):
-        logger.error(f"Database error on {request.url.path}: {error_msg}")
-        return JSONResponse(
-            status_code=503,
-            content={"success": False, "message": "Database service is temporarily unavailable. Please try again later.", "data": None},
-        )
-    logger.error(f"Unhandled error on {request.url.path}: {error_msg}")
-    return JSONResponse(
-        status_code=500,
-        content={"success": False, "message": "Internal server error. Please try again later.", "data": None},
-    )
+# NOTE: Structured exception handlers are registered at the bottom of this file
+# (HTTPException, RequestValidationError, and a general Exception handler with
+# DB-awareness). Do NOT add duplicate handlers here.
 @app.get("/")
 async def root():
     return {"message": "Campus Voice API is running", "docs_url": "/docs"}
@@ -416,9 +404,8 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         raise HTTPException(status_code=401, detail="Invalid authentication")
 
 def require_roles(*allowed_roles: str):
-    def role_checker(current_user: dict = Depends(get_current_user)):
-        user = current_user()
-        if not user or user.get("role") not in allowed_roles:
+    async def role_checker(current_user: dict = Depends(get_current_user)):
+        if not current_user or current_user.get("role") not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You do not have enough permissions to access this resource"
@@ -830,9 +817,12 @@ async def create_complaint(complaint_data: ComplaintCreate, current_user: dict =
 
     return ComplaintResponse(**response_data)
 
+class TranscribeRequest(BaseModel):
+    audio_base64: str
+
 @api_router.post("/complaints/transcribe")
-async def transcribe_voice(audio_base64: str, current_user: dict = Depends(get_current_user)):
-    text = await transcribe_audio_with_whisper(audio_base64)
+async def transcribe_voice(body: TranscribeRequest, current_user: dict = Depends(get_current_user)):
+    text = await transcribe_audio_with_whisper(body.audio_base64)
     return {"text": text}
 
 @api_router.get("/complaints")
@@ -1118,8 +1108,14 @@ async def support_complaint(complaint_id: str, current_user: dict = Depends(get_
     data = {"support_count": support_count, "user_supported": current_user["id"] in supported_by}
     return create_response(True, "Support updated successfully", data)
 
+class ComplaintStatusUpdate(BaseModel):
+    status: str
+    remarks: str = ""
+
 @api_router.post("/complaints/{complaint_id}/status")
-async def update_complaint_status(complaint_id: str, status: str, remarks: str, user=Depends(require_roles("HOD", "PRINCIPAL", "ADMIN")), session: AsyncSession = Depends(get_session)):
+async def update_complaint_status(complaint_id: str, body: ComplaintStatusUpdate, user=Depends(require_roles("HOD", "PRINCIPAL", "ADMIN")), session: AsyncSession = Depends(get_session)):
+    status = body.status
+    remarks = body.remarks
     # Only HOD/Principal/Admin reach here
     # Log status change with user['role'], timestamp, remarks (use existing fields)
     complaint_obj = await session.get(Complaint, complaint_id)
@@ -1147,12 +1143,14 @@ async def update_complaint_status(complaint_id: str, status: str, remarks: str, 
 
     # Update status and log
     complaint_obj.status = status
-    complaint_obj.timeline.append({
+    timeline = list(complaint_obj.timeline or [])
+    timeline.append({
         "status": status,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "note": remarks,
         "updated_by": user["name"]
     })
+    complaint_obj.timeline = timeline  # reassign to trigger SQLAlchemy dirty flag
 
     session.add(complaint_obj)
     await session.commit()
@@ -2698,18 +2696,8 @@ async def get_hods_for_rating(
 # Include router
 app.include_router(api_router)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=[
-        "http://localhost:3000",  # Next.js dev server
-        "http://127.0.0.1:3000",  # Alternative localhost
-        "http://localhost:8000",  # In case backend serves frontend
-        os.environ.get('FRONTEND_URL', 'http://localhost:3000'),  # Environment variable
-    ] + (os.environ.get('CORS_ORIGINS', '').split(',') if os.environ.get('CORS_ORIGINS') else []),
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# NOTE: CORS middleware is already registered near the top of the file (line ~63).
+# A duplicate registration was removed here to prevent conflicting CORS headers.
 
 # ===== EXCEPTION HANDLERS =====
 @app.exception_handler(HTTPException)
@@ -2722,8 +2710,12 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
-    return create_response(False, "Internal server error", status_code=500)
+    error_msg = str(exc)
+    logger.error(f"Unhandled exception on {request.url.path}: {error_msg}", exc_info=True)
+    # Return 503 for database-related errors so the frontend can show a meaningful message
+    if any(kw in error_msg.lower() for kw in ["database", "connection", "mysql", "asyncmy", "sqlalchemy", "operational"]):
+        return create_response(False, "Database service is temporarily unavailable. Please try again later.", status_code=503)
+    return create_response(False, "Internal server error. Please try again later.", status_code=500)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
