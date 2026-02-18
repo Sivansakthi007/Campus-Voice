@@ -517,17 +517,7 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
                     <User className="w-5 h-5 text-gray-400" />
                     <div>
                       <p className="text-sm text-gray-400">Submitted by</p>
-                      <div className="flex items-center gap-2">
-                        <p className="text-white font-medium">{complaint.studentName || "Anonymous Student"}</p>
-                        {complaint.isAnonymous && (
-                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                            Anonymous
-                          </span>
-                        )}
-                      </div>
-                      {complaint.isAnonymous && complaint.studentEmail && (
-                        <p className="text-xs text-gray-500 mt-0.5">{complaint.studentEmail}</p>
-                      )}
+                      <p className="text-white font-medium">{complaint.studentName || "Anonymous"}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">

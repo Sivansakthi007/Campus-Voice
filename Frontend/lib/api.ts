@@ -8,9 +8,8 @@ const API_BASE_URL = (() => {
     return process.env.BACKEND_URL || "https://campus-voice-backend-82u6.onrender.com";
   }
 
-  // Client-side (browser) - empty string routes through Next.js rewrites,
-  // which avoids CORS issues entirely.
-  return process.env.NEXT_PUBLIC_API_URL || "";
+  // Client-side (browser) - Use NEXT_PUBLIC_ env var or production URL
+  return process.env.NEXT_PUBLIC_API_URL || "https://campus-voice-backend-82u6.onrender.com";
 })();
 
 // Types for API responses
@@ -32,7 +31,6 @@ interface RegisterRequest {
   role: UserRole
   department?: string
   student_id?: string
-  staff_role?: string
 }
 
 interface TokenResponse {
@@ -111,13 +109,6 @@ class ApiClient {
       return data
     } catch (error) {
       console.error(`API Error [${endpoint}]:`, error)
-
-      // Translate network-level failures into user-friendly messages
-      if (error instanceof TypeError && error.message === "Failed to fetch") {
-        throw new Error(
-          "Unable to connect to server. Please check your internet connection or try again later."
-        )
-      }
       throw error
     }
   }

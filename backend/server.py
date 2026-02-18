@@ -33,7 +33,7 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # SQLAlchemy (MySQL) engine/session
-SQLALCHEMY_DATABASE_URL = os.environ.get('SQLALCHEMY_DATABASE_URL') or os.environ.get('DATABASE_URL')
+SQLALCHEMY_DATABASE_URL = os.environ.get('SQLALCHEMY_DATABASE_URL')
 
 # Security
 pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt"], deprecated="auto")
@@ -49,34 +49,24 @@ LLM_KEY = os.environ.get('LLM_KEY')
 app = FastAPI(title="Campus Voice API")
 api_router = APIRouter(prefix="/api")
 
-# Add CORS middleware - reads CORS_ORIGINS env var (set to * in .env for dev)
-cors_env = os.environ.get("CORS_ORIGINS", "").strip()
-ALLOWED_ORIGINS = ["*"] if cors_env == "*" else [
-    o.strip() for o in cors_env.split(",") if o.strip()
-] or [
-    "https://campus-voice-frontend.onrender.com",
-    "http://localhost:3000",
-    "http://localhost:3001",
+# Add CORS middleware - Production Ready
+ALLOWED_ORIGINS = [
+    "https://campus-voice-frontend.onrender.com",  # Production frontend
+    "http://localhost:3000",  # Local development
 ]
-logger.info(f"CORS allowed origins: {ALLOWED_ORIGINS}")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True if ALLOWED_ORIGINS != ["*"] else False,
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
 )
 
 @app.on_event("startup")
 async def startup():
-    """Initialize database connection with retry logic for containerized environments.
-    If all attempts fail the server keeps running so non-DB endpoints (health, docs)
-    still respond. DB-dependent endpoints will return 503."""
+    """Initialize database connection with retry logic for containerized environments."""
     import asyncio
-    from db import _mask_url, SQLALCHEMY_DATABASE_URL as db_url
-    
-    logger.info(f"Database URL: {_mask_url(db_url or 'NOT SET')}")
     
     max_retries = 5
     retry_delay = 2  # Start with 2 seconds
@@ -90,21 +80,14 @@ async def startup():
             logger.info("Database connection established successfully!")
             return
         except Exception as e:
-            logger.warning(f"Database connection attempt {attempt} failed: {type(e).__name__}: {str(e)}")
+            logger.warning(f"Database connection attempt {attempt} failed: {str(e)}")
             if attempt < max_retries:
-                wait_time = min(retry_delay * (2 ** (attempt - 1)), 32)
+                wait_time = min(retry_delay * (2 ** (attempt - 1)), 32)  # Exponential backoff, max 32s
                 logger.info(f"Retrying in {wait_time} seconds...")
                 await asyncio.sleep(wait_time)
             else:
-                logger.error(
-                    "All database connection attempts failed! "
-                    "Server will start anyway; DB endpoints will return 503. "
-                    f"Last error: {type(e).__name__}: {str(e)}"
-                )
-
-# NOTE: Structured exception handlers are registered at the bottom of this file
-# (HTTPException, RequestValidationError, and a general Exception handler with
-# DB-awareness). Do NOT add duplicate handlers here.
+                logger.error("All database connection attempts failed!")
+                raise
 @app.get("/")
 async def root():
     return {"message": "Campus Voice API is running", "docs_url": "/docs"}
@@ -136,15 +119,6 @@ class ComplaintCategory(str):
     TRANSPORT = "Transport"
     STAFF_BEHAVIOR = "Staff Behavior"
     ACADEMIC = "Academic Issues"
-    INFRASTRUCTURE = "Infrastructure"
-    CAFETERIA = "Cafeteria"
-    LIBRARY = "Library"
-    SPORTS = "Sports"
-    LAB = "Lab"
-    SCHOLARSHIP = "Scholarship"
-    PLACEMENT = "Placement"
-    ACCOUNTS_FEES = "Accounts/Fees"
-    DISCIPLINE = "Discipline"
 
 class SentimentType(str):
     POSITIVE = "Positive"
@@ -163,46 +137,6 @@ class FoulLanguageSeverity(str):
     MODERATE = "Moderate"
     SEVERE = "Severe"
 
-# ===== STAFF ROLES & TERRITORY MAPPING =====
-STAFF_ROLES = [
-    "Assistant Professor",
-    "Lab Assistant",
-    "Librarian",
-    "Physical Director",
-    "Discipline Coordinator",
-    "Exam Cell Coordinator",
-    "Accountant",
-    "Clerk",
-    "Transport Manager",
-    "Scholarship Coordinator",
-    "Placement Training Coordinator",
-    "Warden",
-    "Infrastructure Coordinator",
-]
-
-# Maps complaint category -> staff role that handles it
-CATEGORY_TO_STAFF_ROLE = {
-    "Sports": "Physical Director",
-    "Library": "Librarian",
-    "Discipline": "Discipline Coordinator",
-    "Exam Cell": "Exam Cell Coordinator",
-    "Transport": "Transport Manager",
-    "Scholarship": "Scholarship Coordinator",
-    "Placement": "Placement Training Coordinator",
-    "Hostel": "Warden",
-    "Infrastructure": "Infrastructure Coordinator",
-    "Accounts/Fees": "Accountant",
-    "Lab": "Lab Assistant",
-    "Academic Issues": "Assistant Professor",
-    "Staff Behavior": "Assistant Professor",
-    "Cafeteria": "Infrastructure Coordinator",
-    "Other": None,  # No specific role; visible to all staff
-}
-
-def get_categories_for_staff_role(staff_role: str) -> list:
-    """Return the list of complaint categories that a given staff_role handles."""
-    return [cat for cat, role in CATEGORY_TO_STAFF_ROLE.items() if role == staff_role]
-
 # User Models
 class UserCreate(BaseModel):
     email: EmailStr
@@ -212,7 +146,6 @@ class UserCreate(BaseModel):
     department: Optional[str] = None
     student_id: Optional[str] = None
     staff_id: Optional[str] = None
-    staff_role: Optional[str] = None  # Territory role for staff
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -227,7 +160,6 @@ class UserResponse(BaseModel):
     department: Optional[str] = None
     student_id: Optional[str] = None
     staff_id: Optional[str] = None
-    staff_role: Optional[str] = None
     created_at: str
 
 class TokenResponse(BaseModel):
@@ -346,24 +278,6 @@ def create_response(success: bool, message: str, data: Any = None, status_code: 
         }
     )
 
-def _mask_anonymous_complaint(data: dict, viewer_role: str) -> dict:
-    """Mask student identity fields for anonymous complaints.
-    
-    Only Admin and Principal can see the real identity of anonymous complaints.
-    All other roles (Student viewing others, Staff, HOD) see masked data.
-    """
-    if not data.get("is_anonymous", False):
-        return data
-    # Admin and Principal can see everything
-    if viewer_role in (UserRole.ADMIN, UserRole.PRINCIPAL):
-        return data
-    # Mask identity for all other roles
-    data = dict(data)  # shallow copy to avoid mutating original
-    data["student_id"] = "anonymous"
-    data["student_name"] = "Anonymous Student"
-    data["student_email"] = None
-    return data
-
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
@@ -399,7 +313,6 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             "department": user.department,
             "student_id": stored_id if is_student else None,
             "staff_id": stored_id if not is_student else None,
-            "staff_role": user.staff_role,
             "created_at": user.created_at.isoformat() if user.created_at else None
         }
     except jwt.ExpiredSignatureError:
@@ -408,8 +321,9 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         raise HTTPException(status_code=401, detail="Invalid authentication")
 
 def require_roles(*allowed_roles: str):
-    async def role_checker(current_user: dict = Depends(get_current_user)):
-        if not current_user or current_user.get("role") not in allowed_roles:
+    def role_checker(current_user: dict = Depends(get_current_user)):
+        user = current_user()
+        if not user or user.get("role") not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You do not have enough permissions to access this resource"
@@ -426,7 +340,7 @@ async def analyze_complaint_with_ai(text: str) -> AIAnalysis:
         system_message = """You are an AI assistant that analyzes student complaints. 
             Analyze the complaint and respond ONLY with a JSON object (no markdown, no explanation) with these exact keys:
             - sentiment: one of [Positive, Negative, Angry, Urgent]
-            - category: one of [Hostel, Exam Cell, Transport, Staff Behavior, Academic Issues, Infrastructure, Cafeteria, Library, Sports, Lab, Scholarship, Placement, Accounts/Fees, Discipline, Other]
+            - category: one of [Hostel, Exam Cell, Transport, Staff Behavior, Academic Issues]
             - priority: one of [High, Medium, Low]
             - foul_language_detected: boolean (true if foul/offensive language is present)
             - foul_language_severity: one of [None, Mild, Moderate, Severe]
@@ -540,8 +454,7 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_se
         name=user_data.name,
         role=user_data.role,
         department=user_data.department,
-        student_id=stored_id,  # Polymorphic: stores student_id or staff_id
-        staff_role=user_data.staff_role if user_data.role == UserRole.STAFF else None
+        student_id=stored_id  # Polymorphic: stores student_id or staff_id
     )
     session.add(user_obj)
     await session.commit()
@@ -561,7 +474,6 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_se
         department=user_obj.department,
         student_id=stored_id if is_student_role else None,
         staff_id=stored_id if not is_student_role else None,
-        staff_role=user_obj.staff_role,
         created_at=user_obj.created_at.isoformat() if user_obj.created_at else None
     )
 
@@ -593,7 +505,6 @@ async def login(credentials: UserLogin, session: AsyncSession = Depends(get_sess
         department=user_obj.department,
         student_id=stored_id if is_student_role else None,
         staff_id=stored_id if not is_student_role else None,
-        staff_role=user_obj.staff_role,
         created_at=user_obj.created_at.isoformat() if user_obj.created_at else None
     )
 
@@ -630,7 +541,6 @@ async def list_users(role: Optional[str] = None, current_user: dict = Depends(ge
             "department": u.department,
             "student_id": stored_id if is_student else None,
             "staff_id": stored_id if not is_student else None,
-            "staff_role": u.staff_role,
             "created_at": u.created_at.isoformat() if u.created_at else None,
         }
 
@@ -821,12 +731,9 @@ async def create_complaint(complaint_data: ComplaintCreate, current_user: dict =
 
     return ComplaintResponse(**response_data)
 
-class TranscribeRequest(BaseModel):
-    audio_base64: str
-
 @api_router.post("/complaints/transcribe")
-async def transcribe_voice(body: TranscribeRequest, current_user: dict = Depends(get_current_user)):
-    text = await transcribe_audio_with_whisper(body.audio_base64)
+async def transcribe_voice(audio_base64: str, current_user: dict = Depends(get_current_user)):
+    text = await transcribe_audio_with_whisper(audio_base64)
     return {"text": text}
 
 @api_router.get("/complaints")
@@ -837,25 +744,8 @@ async def get_complaints(current_user: dict = Depends(get_current_user), session
     if current_user["role"] == UserRole.STUDENT:
         stmt = stmt.where(Complaint.student_id == current_user["id"])
     elif current_user["role"] == UserRole.STAFF:
-        # Territory-based: staff see complaints matching their role's categories
-        # PLUS any complaints explicitly assigned to them
-        staff_role = current_user.get("staff_role")
-        if staff_role:
-            territory_categories = get_categories_for_staff_role(staff_role)
-            if territory_categories:
-                from sqlalchemy import or_
-                stmt = stmt.where(
-                    or_(
-                        Complaint.category.in_(territory_categories),
-                        Complaint.assigned_to == current_user["id"]
-                    )
-                )
-            else:
-                # No category mapping; fall back to assigned only
-                stmt = stmt.where(Complaint.assigned_to == current_user["id"])
-        else:
-            # No staff_role set; fall back to assigned only
-            stmt = stmt.where(Complaint.assigned_to == current_user["id"])
+        # Staff should only see complaints assigned to them
+        stmt = stmt.where(Complaint.assigned_to == current_user["id"])
     # Admin, Principal, HOD see all complaints
 
     stmt = stmt.order_by(Complaint.created_at.desc()).limit(1000)
@@ -863,7 +753,7 @@ async def get_complaints(current_user: dict = Depends(get_current_user), session
     complaints = res.scalars().all()
 
     def _to_response(c: Complaint):
-        data = {
+        return {
             "id": c.id,
             "title": c.title,
             "description": c.description,
@@ -876,7 +766,6 @@ async def get_complaints(current_user: dict = Depends(get_current_user), session
             "is_anonymous": c.is_anonymous,
             "student_id": c.student_id,
             "student_name": c.student_name,
-            "student_email": c.student_email,
             "support_count": c.support_count,
             "assigned_to": c.assigned_to,
             "assigned_to_name": c.assigned_to_name,
@@ -886,7 +775,6 @@ async def get_complaints(current_user: dict = Depends(get_current_user), session
             "responses": c.responses,
             "timeline": c.timeline
         }
-        return _mask_anonymous_complaint(data, current_user["role"])
 
     return create_response(True, "Complaints retrieved successfully", [_to_response(c) for c in complaints])
 
@@ -896,31 +784,30 @@ async def get_complaint(complaint_id: str, current_user: dict = Depends(get_curr
     if not complaint:
         raise HTTPException(status_code=404, detail="Complaint not found")
 
-    data = {
-        "id": complaint.id,
-        "title": complaint.title,
-        "description": complaint.description,
-        "status": complaint.status,
-        "category": complaint.category,
-        "priority": complaint.priority,
-        "sentiment": complaint.sentiment,
-        "foul_language_severity": complaint.foul_language_severity,
-        "foul_language_detected": complaint.foul_language_detected,
-        "is_anonymous": complaint.is_anonymous,
-        "student_id": complaint.student_id,
-        "student_name": complaint.student_name,
-        "student_email": complaint.student_email,
-        "support_count": complaint.support_count,
-        "assigned_to": complaint.assigned_to,
-        "assigned_to_name": complaint.assigned_to_name,
-        "assigned_at": complaint.assigned_at.isoformat() if complaint.assigned_at else None,
-        "created_at": complaint.created_at.isoformat() if complaint.created_at else None,
-        "updated_at": complaint.updated_at.isoformat() if complaint.updated_at else None,
-        "responses": complaint.responses,
-        "timeline": complaint.timeline
-    }
-    masked = _mask_anonymous_complaint(data, current_user["role"])
-    return ComplaintResponse(**masked)
+
+    return ComplaintResponse(
+        id=complaint.id,
+        title=complaint.title,
+        description=complaint.description,
+        status=complaint.status,
+        category=complaint.category,
+        priority=complaint.priority,
+        sentiment=complaint.sentiment,
+        foul_language_severity=complaint.foul_language_severity,
+        foul_language_detected=complaint.foul_language_detected,
+        is_anonymous=complaint.is_anonymous,
+        student_id=complaint.student_id,
+        student_name=complaint.student_name,
+        student_email=complaint.student_email,
+        support_count=complaint.support_count,
+        assigned_to=complaint.assigned_to,
+        assigned_to_name=complaint.assigned_to_name,
+        assigned_at=complaint.assigned_at.isoformat() if complaint.assigned_at else None,
+        created_at=complaint.created_at.isoformat() if complaint.created_at else None,
+        updated_at=complaint.updated_at.isoformat() if complaint.updated_at else None,
+        responses=complaint.responses,
+        timeline=complaint.timeline
+    )
 
 @api_router.put("/complaints/{complaint_id}")
 async def update_complaint(complaint_id: str, update_data: ComplaintUpdate, current_user: dict = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
@@ -1025,15 +912,13 @@ async def update_complaint(complaint_id: str, update_data: ComplaintUpdate, curr
         "is_anonymous": complaint_obj.is_anonymous,
         "student_id": complaint_obj.student_id,
         "student_name": complaint_obj.student_name,
-        "student_email": complaint_obj.student_email,
         "support_count": complaint_obj.support_count,
         "created_at": complaint_obj.created_at.isoformat() if complaint_obj.created_at else None,
         "updated_at": complaint_obj.updated_at.isoformat() if complaint_obj.updated_at else None,
         "responses": complaint_obj.responses,
         "timeline": complaint_obj.timeline
     }
-    masked = _mask_anonymous_complaint(data, current_user["role"])
-    return create_response(True, "Complaint updated successfully", masked)
+    return create_response(True, "Complaint updated successfully", data)
 
 @api_router.delete("/complaints/{complaint_id}")
 async def delete_complaint(complaint_id: str, confirm: bool = False, current_user: dict = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
@@ -1112,14 +997,8 @@ async def support_complaint(complaint_id: str, current_user: dict = Depends(get_
     data = {"support_count": support_count, "user_supported": current_user["id"] in supported_by}
     return create_response(True, "Support updated successfully", data)
 
-class ComplaintStatusUpdate(BaseModel):
-    status: str
-    remarks: str = ""
-
 @api_router.post("/complaints/{complaint_id}/status")
-async def update_complaint_status(complaint_id: str, body: ComplaintStatusUpdate, user=Depends(require_roles("HOD", "PRINCIPAL", "ADMIN")), session: AsyncSession = Depends(get_session)):
-    status = body.status
-    remarks = body.remarks
+async def update_complaint_status(complaint_id: str, status: str, remarks: str, user=Depends(require_roles("HOD", "PRINCIPAL", "ADMIN")), session: AsyncSession = Depends(get_session)):
     # Only HOD/Principal/Admin reach here
     # Log status change with user['role'], timestamp, remarks (use existing fields)
     complaint_obj = await session.get(Complaint, complaint_id)
@@ -1147,14 +1026,12 @@ async def update_complaint_status(complaint_id: str, body: ComplaintStatusUpdate
 
     # Update status and log
     complaint_obj.status = status
-    timeline = list(complaint_obj.timeline or [])
-    timeline.append({
+    complaint_obj.timeline.append({
         "status": status,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "note": remarks,
         "updated_by": user["name"]
     })
-    complaint_obj.timeline = timeline  # reassign to trigger SQLAlchemy dirty flag
 
     session.add(complaint_obj)
     await session.commit()
@@ -1189,21 +1066,9 @@ async def get_eligible_staff(
     from utils.conflict_detection import get_eligible_staff_for_assignment
     eligible_staff, excluded_staff = get_eligible_staff_for_assignment(complaint, all_staff)
     
-    # Prioritize staff whose staff_role matches the complaint's category
-    target_role = CATEGORY_TO_STAFF_ROLE.get(complaint.category)
-    
-    def staff_sort_key(s):
-        # Territory-matched staff come first (0), others second (1)
-        if target_role and s.staff_role == target_role:
-            return 0
-        return 1
-    
-    eligible_staff_sorted = sorted(eligible_staff, key=staff_sort_key)
-    
     eligible_list = [
-        {"id": s.id, "name": s.name, "department": s.department, "staff_role": s.staff_role,
-         "territory_match": bool(target_role and s.staff_role == target_role)}
-        for s in eligible_staff_sorted
+        {"id": s.id, "name": s.name, "department": s.department}
+        for s in eligible_staff
     ]
     
     excluded_names = [s.name for s in excluded_staff]
@@ -2700,8 +2565,18 @@ async def get_hods_for_rating(
 # Include router
 app.include_router(api_router)
 
-# NOTE: CORS middleware is already registered near the top of the file (line ~63).
-# A duplicate registration was removed here to prevent conflicting CORS headers.
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=[
+        "http://localhost:3000",  # Next.js dev server
+        "http://127.0.0.1:3000",  # Alternative localhost
+        "http://localhost:8000",  # In case backend serves frontend
+        os.environ.get('FRONTEND_URL', 'http://localhost:3000'),  # Environment variable
+    ] + (os.environ.get('CORS_ORIGINS', '').split(',') if os.environ.get('CORS_ORIGINS') else []),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ===== EXCEPTION HANDLERS =====
 @app.exception_handler(HTTPException)
@@ -2714,12 +2589,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
-    error_msg = str(exc)
-    logger.error(f"Unhandled exception on {request.url.path}: {error_msg}", exc_info=True)
-    # Return 503 for database-related errors so the frontend can show a meaningful message
-    if any(kw in error_msg.lower() for kw in ["database", "connection", "mysql", "asyncmy", "sqlalchemy", "operational"]):
-        return create_response(False, "Database service is temporarily unavailable. Please try again later.", status_code=503)
-    return create_response(False, "Internal server error. Please try again later.", status_code=500)
+    logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
+    return create_response(False, "Internal server error", status_code=500)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

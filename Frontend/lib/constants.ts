@@ -71,30 +71,7 @@ export const COMPLAINT_CATEGORIES = [
   "Cafeteria",
   "Library",
   "Sports",
-  "Lab",
-  "Scholarship",
-  "Placement",
-  "Accounts/Fees",
-  "Discipline",
   "Other",
 ] as const
 
 export type ComplaintCategory = (typeof COMPLAINT_CATEGORIES)[number]
-
-export const STAFF_ROLES = [
-  "Assistant Professor",
-  "Lab Assistant",
-  "Librarian",
-  "Physical Director",
-  "Discipline Coordinator",
-  "Exam Cell Coordinator",
-  "Accountant",
-  "Clerk",
-  "Transport Manager",
-  "Scholarship Coordinator",
-  "Placement Training Coordinator",
-  "Warden",
-  "Infrastructure Coordinator",
-] as const
-
-export type StaffRole = (typeof STAFF_ROLES)[number]

@@ -8,7 +8,6 @@ export interface User {
   department?: string
   studentId?: string
   staffId?: string
-  staffRole?: string
   avatar?: string
 }
 
