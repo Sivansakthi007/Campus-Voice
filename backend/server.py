@@ -49,23 +49,30 @@ LLM_KEY = os.environ.get('LLM_KEY')
 app = FastAPI(title="Campus Voice API")
 api_router = APIRouter(prefix="/api")
 
-# Add CORS middleware - Production Ready
-ALLOWED_ORIGINS = [
-    "https://campus-voice-frontend.onrender.com",  # Production frontend
-    "http://localhost:3000",  # Local development
+# Add CORS middleware - reads CORS_ORIGINS env var (set to * in .env for dev)
+cors_env = os.environ.get("CORS_ORIGINS", "").strip()
+ALLOWED_ORIGINS = ["*"] if cors_env == "*" else [
+    o.strip() for o in cors_env.split(",") if o.strip()
+] or [
+    "https://campus-voice-frontend.onrender.com",
+    "http://localhost:3000",
+    "http://localhost:3001",
 ]
+logger.info(f"CORS allowed origins: {ALLOWED_ORIGINS}")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
+    allow_credentials=True if ALLOWED_ORIGINS != ["*"] else False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
 )
 
 @app.on_event("startup")
 async def startup():
-    """Initialize database connection with retry logic for containerized environments."""
+    """Initialize database connection with retry logic for containerized environments.
+    If all attempts fail the server keeps running so non-DB endpoints (health, docs)
+    still respond. DB-dependent endpoints will return 503."""
     import asyncio
     
     max_retries = 5
@@ -82,12 +89,30 @@ async def startup():
         except Exception as e:
             logger.warning(f"Database connection attempt {attempt} failed: {str(e)}")
             if attempt < max_retries:
-                wait_time = min(retry_delay * (2 ** (attempt - 1)), 32)  # Exponential backoff, max 32s
+                wait_time = min(retry_delay * (2 ** (attempt - 1)), 32)
                 logger.info(f"Retrying in {wait_time} seconds...")
                 await asyncio.sleep(wait_time)
             else:
-                logger.error("All database connection attempts failed!")
-                raise
+                logger.error(
+                    "All database connection attempts failed! "
+                    "Server will start anyway; DB endpoints will return 503."
+                )
+
+# Global handler: catch DB-related errors and return a clear 503
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    error_msg = str(exc)
+    if any(keyword in error_msg.lower() for keyword in ["database", "connection", "mysql", "asyncmy", "sqlalchemy", "operational"]):
+        logger.error(f"Database error on {request.url.path}: {error_msg}")
+        return JSONResponse(
+            status_code=503,
+            content={"success": False, "message": "Database service is temporarily unavailable. Please try again later.", "data": None},
+        )
+    logger.error(f"Unhandled error on {request.url.path}: {error_msg}")
+    return JSONResponse(
+        status_code=500,
+        content={"success": False, "message": "Internal server error. Please try again later.", "data": None},
+    )
 @app.get("/")
 async def root():
     return {"message": "Campus Voice API is running", "docs_url": "/docs"}
