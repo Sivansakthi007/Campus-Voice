@@ -119,6 +119,15 @@ class ComplaintCategory(str):
     TRANSPORT = "Transport"
     STAFF_BEHAVIOR = "Staff Behavior"
     ACADEMIC = "Academic Issues"
+    INFRASTRUCTURE = "Infrastructure"
+    CAFETERIA = "Cafeteria"
+    LIBRARY = "Library"
+    SPORTS = "Sports"
+    LAB = "Lab"
+    SCHOLARSHIP = "Scholarship"
+    PLACEMENT = "Placement"
+    ACCOUNTS_FEES = "Accounts/Fees"
+    DISCIPLINE = "Discipline"
 
 class SentimentType(str):
     POSITIVE = "Positive"
@@ -137,6 +146,46 @@ class FoulLanguageSeverity(str):
     MODERATE = "Moderate"
     SEVERE = "Severe"
 
+# ===== STAFF ROLES & TERRITORY MAPPING =====
+STAFF_ROLES = [
+    "Assistant Professor",
+    "Lab Assistant",
+    "Librarian",
+    "Physical Director",
+    "Discipline Coordinator",
+    "Exam Cell Coordinator",
+    "Accountant",
+    "Clerk",
+    "Transport Manager",
+    "Scholarship Coordinator",
+    "Placement Training Coordinator",
+    "Warden",
+    "Infrastructure Coordinator",
+]
+
+# Maps complaint category -> staff role that handles it
+CATEGORY_TO_STAFF_ROLE = {
+    "Sports": "Physical Director",
+    "Library": "Librarian",
+    "Discipline": "Discipline Coordinator",
+    "Exam Cell": "Exam Cell Coordinator",
+    "Transport": "Transport Manager",
+    "Scholarship": "Scholarship Coordinator",
+    "Placement": "Placement Training Coordinator",
+    "Hostel": "Warden",
+    "Infrastructure": "Infrastructure Coordinator",
+    "Accounts/Fees": "Accountant",
+    "Lab": "Lab Assistant",
+    "Academic Issues": "Assistant Professor",
+    "Staff Behavior": "Assistant Professor",
+    "Cafeteria": "Infrastructure Coordinator",
+    "Other": None,  # No specific role; visible to all staff
+}
+
+def get_categories_for_staff_role(staff_role: str) -> list:
+    """Return the list of complaint categories that a given staff_role handles."""
+    return [cat for cat, role in CATEGORY_TO_STAFF_ROLE.items() if role == staff_role]
+
 # User Models
 class UserCreate(BaseModel):
     email: EmailStr
@@ -146,6 +195,7 @@ class UserCreate(BaseModel):
     department: Optional[str] = None
     student_id: Optional[str] = None
     staff_id: Optional[str] = None
+    staff_role: Optional[str] = None  # Territory role for staff
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -160,6 +210,7 @@ class UserResponse(BaseModel):
     department: Optional[str] = None
     student_id: Optional[str] = None
     staff_id: Optional[str] = None
+    staff_role: Optional[str] = None
     created_at: str
 
 class TokenResponse(BaseModel):
@@ -331,6 +382,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             "department": user.department,
             "student_id": stored_id if is_student else None,
             "staff_id": stored_id if not is_student else None,
+            "staff_role": user.staff_role,
             "created_at": user.created_at.isoformat() if user.created_at else None
         }
     except jwt.ExpiredSignatureError:
@@ -358,7 +410,7 @@ async def analyze_complaint_with_ai(text: str) -> AIAnalysis:
         system_message = """You are an AI assistant that analyzes student complaints. 
             Analyze the complaint and respond ONLY with a JSON object (no markdown, no explanation) with these exact keys:
             - sentiment: one of [Positive, Negative, Angry, Urgent]
-            - category: one of [Hostel, Exam Cell, Transport, Staff Behavior, Academic Issues]
+            - category: one of [Hostel, Exam Cell, Transport, Staff Behavior, Academic Issues, Infrastructure, Cafeteria, Library, Sports, Lab, Scholarship, Placement, Accounts/Fees, Discipline, Other]
             - priority: one of [High, Medium, Low]
             - foul_language_detected: boolean (true if foul/offensive language is present)
             - foul_language_severity: one of [None, Mild, Moderate, Severe]
@@ -472,7 +524,8 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_se
         name=user_data.name,
         role=user_data.role,
         department=user_data.department,
-        student_id=stored_id  # Polymorphic: stores student_id or staff_id
+        student_id=stored_id,  # Polymorphic: stores student_id or staff_id
+        staff_role=user_data.staff_role if user_data.role == UserRole.STAFF else None
     )
     session.add(user_obj)
     await session.commit()
@@ -492,6 +545,7 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_se
         department=user_obj.department,
         student_id=stored_id if is_student_role else None,
         staff_id=stored_id if not is_student_role else None,
+        staff_role=user_obj.staff_role,
         created_at=user_obj.created_at.isoformat() if user_obj.created_at else None
     )
 
@@ -523,6 +577,7 @@ async def login(credentials: UserLogin, session: AsyncSession = Depends(get_sess
         department=user_obj.department,
         student_id=stored_id if is_student_role else None,
         staff_id=stored_id if not is_student_role else None,
+        staff_role=user_obj.staff_role,
         created_at=user_obj.created_at.isoformat() if user_obj.created_at else None
     )
 
@@ -559,6 +614,7 @@ async def list_users(role: Optional[str] = None, current_user: dict = Depends(ge
             "department": u.department,
             "student_id": stored_id if is_student else None,
             "staff_id": stored_id if not is_student else None,
+            "staff_role": u.staff_role,
             "created_at": u.created_at.isoformat() if u.created_at else None,
         }
 
@@ -762,8 +818,25 @@ async def get_complaints(current_user: dict = Depends(get_current_user), session
     if current_user["role"] == UserRole.STUDENT:
         stmt = stmt.where(Complaint.student_id == current_user["id"])
     elif current_user["role"] == UserRole.STAFF:
-        # Staff should only see complaints assigned to them
-        stmt = stmt.where(Complaint.assigned_to == current_user["id"])
+        # Territory-based: staff see complaints matching their role's categories
+        # PLUS any complaints explicitly assigned to them
+        staff_role = current_user.get("staff_role")
+        if staff_role:
+            territory_categories = get_categories_for_staff_role(staff_role)
+            if territory_categories:
+                from sqlalchemy import or_
+                stmt = stmt.where(
+                    or_(
+                        Complaint.category.in_(territory_categories),
+                        Complaint.assigned_to == current_user["id"]
+                    )
+                )
+            else:
+                # No category mapping; fall back to assigned only
+                stmt = stmt.where(Complaint.assigned_to == current_user["id"])
+        else:
+            # No staff_role set; fall back to assigned only
+            stmt = stmt.where(Complaint.assigned_to == current_user["id"])
     # Admin, Principal, HOD see all complaints
 
     stmt = stmt.order_by(Complaint.created_at.desc()).limit(1000)
@@ -1089,9 +1162,21 @@ async def get_eligible_staff(
     from utils.conflict_detection import get_eligible_staff_for_assignment
     eligible_staff, excluded_staff = get_eligible_staff_for_assignment(complaint, all_staff)
     
+    # Prioritize staff whose staff_role matches the complaint's category
+    target_role = CATEGORY_TO_STAFF_ROLE.get(complaint.category)
+    
+    def staff_sort_key(s):
+        # Territory-matched staff come first (0), others second (1)
+        if target_role and s.staff_role == target_role:
+            return 0
+        return 1
+    
+    eligible_staff_sorted = sorted(eligible_staff, key=staff_sort_key)
+    
     eligible_list = [
-        {"id": s.id, "name": s.name, "department": s.department}
-        for s in eligible_staff
+        {"id": s.id, "name": s.name, "department": s.department, "staff_role": s.staff_role,
+         "territory_match": bool(target_role and s.staff_role == target_role)}
+        for s in eligible_staff_sorted
     ]
     
     excluded_names = [s.name for s in excluded_staff]
