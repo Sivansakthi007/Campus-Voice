@@ -87,7 +87,7 @@ export default function RegisterPage() {
       const data = await response.json()
 
       if (!response.ok) {
-        toast.error(data.detail || "Registration failed")
+        toast.error(data.message || data.detail || "Registration failed")
         return
       }
 

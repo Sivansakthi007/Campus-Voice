@@ -490,6 +490,20 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_se
     if existing_user:
         return create_response(False, "Email already registered", status_code=400)
 
+    # Validate staff_role for staff registrations
+    VALID_STAFF_ROLES = [
+        "Assistant Professor", "Lab Assistant", "Librarian",
+        "Physical Director", "Discipline Coordinator", "Exam Cell Coordinator",
+        "Accountant", "Clerk", "Transport Manager",
+        "Scholarship Coordinator", "Placement & Training Coordinator",
+        "Warden", "Infrastructure Coordinator"
+    ]
+    if user_data.role == UserRole.STAFF:
+        if not user_data.staff_role or not user_data.staff_role.strip():
+            return create_response(False, "Staff Role is required for staff registration. Please select a valid Staff Role.", status_code=400)
+        if user_data.staff_role not in VALID_STAFF_ROLES:
+            return create_response(False, f"Invalid Staff Role: '{user_data.staff_role}'. Please select a valid Staff Role from the dropdown.", status_code=400)
+
     # Create user - store ID in student_id column based on role
     is_student = user_data.role == UserRole.STUDENT
     stored_id = user_data.student_id if is_student else user_data.staff_id
