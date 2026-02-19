@@ -51,7 +51,8 @@ export default function RootLayout({
           <FooterWatermark />
         </ThemeProvider>
         <Toaster position="top-right" richColors />
-        <Analytics />
+        {process.env.NODE_ENV === "production" && <Analytics />}
+
       </body>
     </html>
   )

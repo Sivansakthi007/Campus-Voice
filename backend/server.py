@@ -7,7 +7,7 @@ from starlette.middleware.cors import CORSMiddleware
 import os
 import logging
 from pathlib import Path
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_engine, get_session, Base
 from models import User, Complaint, StaffRating, HODRating, HODReportToggle
@@ -77,6 +77,27 @@ async def startup():
             engine = get_engine()
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
+            
+            # Safe migration: add staff_role column if it doesn't exist
+            try:
+                async with engine.begin() as conn:
+                    # Check if staff_role column exists
+                    result = await conn.execute(text(
+                        "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
+                        "WHERE TABLE_NAME = 'users' AND COLUMN_NAME = 'staff_role'"
+                    ))
+                    column_exists = result.fetchone() is not None
+                    
+                    if not column_exists:
+                        await conn.execute(text(
+                            "ALTER TABLE users ADD COLUMN staff_role VARCHAR(100) NULL"
+                        ))
+                        logger.info("Migration: Added 'staff_role' column to users table")
+                    else:
+                        logger.info("Migration: 'staff_role' column already exists")
+            except Exception as migration_err:
+                logger.warning(f"Migration check for staff_role column: {str(migration_err)}")
+            
             logger.info("Database connection established successfully!")
             return
         except Exception as e:
@@ -507,18 +528,23 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_se
     # Create user - store ID in student_id column based on role
     is_student = user_data.role == UserRole.STUDENT
     stored_id = user_data.student_id if is_student else user_data.staff_id
-    user_obj = User(
-        email=user_data.email,
-        password=hash_password(user_data.password),
-        name=user_data.name,
-        role=user_data.role,
-        department=user_data.department,
-        student_id=stored_id,  # Polymorphic: stores student_id or staff_id
-        staff_role=user_data.staff_role if user_data.role != UserRole.STUDENT else None
-    )
-    session.add(user_obj)
-    await session.commit()
-    await session.refresh(user_obj)
+    try:
+        user_obj = User(
+            email=user_data.email,
+            password=hash_password(user_data.password),
+            name=user_data.name,
+            role=user_data.role,
+            department=user_data.department,
+            student_id=stored_id,  # Polymorphic: stores student_id or staff_id
+            staff_role=user_data.staff_role if user_data.role != UserRole.STUDENT else None
+        )
+        session.add(user_obj)
+        await session.commit()
+        await session.refresh(user_obj)
+    except Exception as e:
+        logger.error(f"Registration failed for {user_data.email}: {str(e)}")
+        await session.rollback()
+        return create_response(False, "Registration failed due to a server error. Please try again.", status_code=500)
 
     # Create token
     access_token = create_access_token({"sub": user_obj.id})
@@ -686,43 +712,50 @@ async def get_profile_photo(user_id: str):
 async def auto_assign_complaint(category: str, session: AsyncSession):
     """Auto-assign complaint to staff based on category→role mapping.
     Picks the staff member with fewest active (non-resolved) complaints.
-    Returns (staff_id, staff_name) or (None, None)."""
-    target_role = CATEGORY_TO_STAFF_ROLE.get(category)
-    if not target_role:
-        logger.info(f"No staff role mapping for category '{category}', skipping auto-assign")
-        return None, None
+    Returns (staff_id, staff_name) or (None, None). Never raises."""
+    try:
+        if not category:
+            return None, None
 
-    # Find all staff with the matching staff_role
-    staff_stmt = select(User).where(
-        User.role == UserRole.STAFF,
-        User.staff_role == target_role
-    )
-    result = await session.execute(staff_stmt)
-    staff_list = result.scalars().all()
+        target_role = CATEGORY_TO_STAFF_ROLE.get(category)
+        if not target_role:
+            logger.info(f"No staff role mapping for category '{category}', skipping auto-assign")
+            return None, None
 
-    if not staff_list:
-        logger.info(f"No staff found with role '{target_role}' for category '{category}'")
-        return None, None
-
-    # Pick staff with fewest active (non-resolved, non-rejected) complaints
-    best_staff = None
-    min_count = float('inf')
-    for staff in staff_list:
-        count_stmt = select(func.count(Complaint.id)).where(
-            Complaint.assigned_to == staff.id,
-            Complaint.status.notin_([ComplaintStatus.RESOLVED, ComplaintStatus.REJECTED])
+        # Find all staff with the matching staff_role
+        staff_stmt = select(User).where(
+            User.role == UserRole.STAFF,
+            User.staff_role == target_role
         )
-        count_result = await session.execute(count_stmt)
-        active_count = count_result.scalar() or 0
-        if active_count < min_count:
-            min_count = active_count
-            best_staff = staff
+        result = await session.execute(staff_stmt)
+        staff_list = result.scalars().all()
 
-    if best_staff:
-        logger.info(f"Auto-assigning to staff '{best_staff.name}' (role: {target_role}, active: {min_count})")
-        return best_staff.id, best_staff.name
+        if not staff_list:
+            logger.info(f"No staff found with role '{target_role}' for category '{category}'")
+            return None, None
 
-    return None, None
+        # Pick staff with fewest active (non-resolved, non-rejected) complaints
+        best_staff = None
+        min_count = float('inf')
+        for staff in staff_list:
+            count_stmt = select(func.count(Complaint.id)).where(
+                Complaint.assigned_to == staff.id,
+                Complaint.status.notin_([ComplaintStatus.RESOLVED, ComplaintStatus.REJECTED])
+            )
+            count_result = await session.execute(count_stmt)
+            active_count = count_result.scalar() or 0
+            if active_count < min_count:
+                min_count = active_count
+                best_staff = staff
+
+        if best_staff:
+            logger.info(f"Auto-assigning to staff '{best_staff.name}' (role: {target_role}, active: {min_count})")
+            return best_staff.id, best_staff.name
+
+        return None, None
+    except Exception as e:
+        logger.error(f"Error in auto_assign_complaint for category '{category}': {str(e)}")
+        return None, None
 
 # ===== COMPLAINT ENDPOINTS =====
 @api_router.post("/complaints", response_model=ComplaintResponse, status_code=201)
@@ -800,16 +833,20 @@ async def create_complaint(complaint_data: ComplaintCreate, current_user: dict =
     )
 
     # Auto-assign complaint based on category → staff role mapping
-    assigned_staff_id, assigned_staff_name = await auto_assign_complaint(final_category, session)
-    if assigned_staff_id:
-        complaint_obj.assigned_to = assigned_staff_id
-        complaint_obj.assigned_to_name = assigned_staff_name
-        complaint_obj.assigned_at = datetime.now(timezone.utc)
-        complaint_obj.timeline.append({
-            "status": "auto_assigned",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "note": f"Auto-assigned to {assigned_staff_name}"
-        })
+    try:
+        assigned_staff_id, assigned_staff_name = await auto_assign_complaint(final_category, session)
+        if assigned_staff_id:
+            complaint_obj.assigned_to = assigned_staff_id
+            complaint_obj.assigned_to_name = assigned_staff_name
+            complaint_obj.assigned_at = datetime.now(timezone.utc)
+            complaint_obj.timeline.append({
+                "status": "auto_assigned",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "note": f"Auto-assigned to {assigned_staff_name}"
+            })
+    except Exception as e:
+        logger.error(f"Auto-assignment failed for category '{final_category}': {str(e)}")
+        # Continue without assignment — complaint is still created successfully
 
     session.add(complaint_obj)
     
