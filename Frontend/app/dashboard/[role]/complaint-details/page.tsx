@@ -44,7 +44,10 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
   const [selectedStatus, setSelectedStatus] = useState<string>("")
   const [remark, setRemark] = useState("")
   const [selectedStaff, setSelectedStaff] = useState<string>("")
-  const [staffList, setStaffList] = useState<Array<{ id: string; name: string; department?: string }>>([])
+  const [staffList, setStaffList] = useState<Array<{ id: string; name: string; department?: string; staff_role?: string }>>([])
+
+  // Categories that are HOD-only (must match backend HOD_CATEGORIES)
+  const HOD_REASSIGN_CATEGORIES = ["Academic Issues", "Staff Behavior"]
 
   // Handle complaint not found (deleted by another user)
   const handleNotFound = useCallback(() => {
@@ -268,9 +271,13 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
   }
 
   const canUpdateStatus = role === USER_ROLES.STAFF
-  const canAcceptReject = role === USER_ROLES.HOD || role === USER_ROLES.PRINCIPAL || role === USER_ROLES.ADMIN
+  const canAcceptReject = role === USER_ROLES.PRINCIPAL || role === USER_ROLES.ADMIN
   const canAssignStaff = role === USER_ROLES.HOD || role === USER_ROLES.PRINCIPAL || role === USER_ROLES.ADMIN
   const canEscalate = role === USER_ROLES.STAFF
+
+  // HOD can reassign Academic Issues / Staff Behavior complaints even if already assigned
+  const isHodCategory = complaint ? HOD_REASSIGN_CATEGORIES.includes(complaint.category) : false
+  const canReassign = isHodCategory && role === USER_ROLES.HOD && !!complaint?.assignedTo
 
   // Complete button: Staff can complete if assigned to them AND status is resolved
   // Admin can complete any resolved complaint
@@ -353,6 +360,15 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
                   >
                     <UserPlus className="w-4 h-4" />
                     Assign Staff
+                  </button>
+                )}
+                {canReassign && (
+                  <button
+                    onClick={() => setShowAssignModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl hover:shadow-lg transition-all"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    Reassign Staff
                   </button>
                 )}
               </>
@@ -658,7 +674,7 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
                       }`}
                   >
                     <p className="font-medium">{staff.name}</p>
-                    <p className="text-sm opacity-70">{staff.department}</p>
+                    <p className="text-sm opacity-70">{staff.department}{staff.staff_role ? ` • ${staff.staff_role}` : ''}</p>
                   </button>
                 ))}
               </div>

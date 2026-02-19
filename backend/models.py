@@ -39,6 +39,7 @@ class Complaint(Base):
     student_id = Column(String(36), nullable=False)
     student_name = Column(String(255), nullable=True)
     student_email = Column(String(255), nullable=True)
+    student_department = Column(String(255), nullable=True)
     support_count = Column(Integer, default=0)
     supported_by = Column(JSON, default=list)
     responses = Column(JSON, default=list)

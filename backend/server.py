@@ -7,7 +7,7 @@ from starlette.middleware.cors import CORSMiddleware
 import os
 import logging
 from pathlib import Path
-from sqlalchemy import select, func, text
+from sqlalchemy import select, func, text, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_engine, get_session, Base
 from models import User, Complaint, StaffRating, HODRating, HODReportToggle
@@ -98,6 +98,25 @@ async def startup():
             except Exception as migration_err:
                 logger.warning(f"Migration check for staff_role column: {str(migration_err)}")
             
+            # Safe migration: add student_department column to complaints if it doesn't exist
+            try:
+                async with engine.begin() as conn:
+                    result = await conn.execute(text(
+                        "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
+                        "WHERE TABLE_NAME = 'complaints' AND COLUMN_NAME = 'student_department'"
+                    ))
+                    column_exists = result.fetchone() is not None
+                    
+                    if not column_exists:
+                        await conn.execute(text(
+                            "ALTER TABLE complaints ADD COLUMN student_department VARCHAR(255) NULL"
+                        ))
+                        logger.info("Migration: Added 'student_department' column to complaints table")
+                    else:
+                        logger.info("Migration: 'student_department' column already exists")
+            except Exception as migration_err:
+                logger.warning(f"Migration check for student_department column: {str(migration_err)}")
+            
             logger.info("Database connection established successfully!")
             return
         except Exception as e:
@@ -166,7 +185,12 @@ class StaffRole(str):
     WARDEN = "Warden"
     INFRASTRUCTURE_COORDINATOR = "Infrastructure Coordinator"
 
+# Categories that MUST be assigned ONLY to the HOD of the student's department
+# Manual override is blocked for these categories
+HOD_CATEGORIES = {"Academic Issues", "Staff Behavior"}
+
 # Mapping: Complaint Category -> Staff Role for auto-assignment
+# NOTE: HOD_CATEGORIES are NOT in this mapping — they use department-based HOD routing
 CATEGORY_TO_STAFF_ROLE = {
     "Sports": "Physical Director",
     "Library": "Librarian",
@@ -179,8 +203,7 @@ CATEGORY_TO_STAFF_ROLE = {
     "Hostel": "Warden",
     "Infrastructure": "Infrastructure Coordinator",
     "Lab": "Lab Assistant",
-    "Academic Issues": "Assistant Professor",
-    "Staff Behavior": "Assistant Professor",
+    "Office": "Clerk",
 }
 
 class SentimentType(str):
@@ -709,14 +732,47 @@ async def get_profile_photo(user_id: str):
     return RedirectResponse(dicebear_url)
 
 # ===== AUTO-ASSIGNMENT HELPER =====
-async def auto_assign_complaint(category: str, session: AsyncSession):
-    """Auto-assign complaint to staff based on category→role mapping.
-    Picks the staff member with fewest active (non-resolved) complaints.
-    Returns (staff_id, staff_name) or (None, None). Never raises."""
+async def auto_assign_complaint(category: str, session: AsyncSession, student_department: str = None):
+    """Auto-assign complaint based on category.
+
+    - HOD_CATEGORIES (Academic Issues, Staff Behavior): assigned to the HOD
+      of the student's department.
+    - All other categories: assigned to staff matching CATEGORY_TO_STAFF_ROLE,
+      load-balanced by fewest active complaints.
+
+    Returns (staff_id, staff_name) or (None, None). Never raises.
+    """
     try:
         if not category:
             return None, None
 
+        # ── HOD-based assignment ──
+        if category in HOD_CATEGORIES:
+            if not student_department:
+                logger.warning(f"Cannot assign '{category}' complaint — student department is unknown")
+                return None, None
+
+            hod_stmt = select(User).where(
+                User.role == UserRole.HOD,
+                User.department == student_department
+            )
+            result = await session.execute(hod_stmt)
+            hod = result.scalars().first()
+
+            if not hod:
+                logger.warning(
+                    f"No HOD found for department '{student_department}' "
+                    f"to handle '{category}' complaint"
+                )
+                return None, None
+
+            logger.info(
+                f"Auto-assigning '{category}' complaint to HOD "
+                f"'{hod.name}' (dept: {student_department})"
+            )
+            return hod.id, hod.name
+
+        # ── Role-based assignment ──
         target_role = CATEGORY_TO_STAFF_ROLE.get(category)
         if not target_role:
             logger.info(f"No staff role mapping for category '{category}', skipping auto-assign")
@@ -731,7 +787,7 @@ async def auto_assign_complaint(category: str, session: AsyncSession):
         staff_list = result.scalars().all()
 
         if not staff_list:
-            logger.info(f"No staff found with role '{target_role}' for category '{category}'")
+            logger.warning(f"No staff found with role '{target_role}' for category '{category}'")
             return None, None
 
         # Pick staff with fewest active (non-resolved, non-rejected) complaints
@@ -805,6 +861,10 @@ async def create_complaint(complaint_data: ComplaintCreate, current_user: dict =
     if not final_category:
         final_category = analysis.category or "Other"
 
+    # Look up student's department for HOD-based assignment
+    student_user = await session.get(User, current_user["id"])
+    student_dept = student_user.department if student_user else current_user.get("department")
+
     # Create complaint
     complaint_obj = Complaint(
         title=complaint_data.title,
@@ -820,6 +880,7 @@ async def create_complaint(complaint_data: ComplaintCreate, current_user: dict =
         student_id=current_user["id"],
         student_name=None if complaint_data.is_anonymous else current_user["name"],
         student_email=current_user["email"],
+        student_department=student_dept,
         support_count=0,
         supported_by=[],
         responses=[],
@@ -832,9 +893,11 @@ async def create_complaint(complaint_data: ComplaintCreate, current_user: dict =
         ]
     )
 
-    # Auto-assign complaint based on category → staff role mapping
+    # Auto-assign complaint based on category → staff role / HOD mapping
     try:
-        assigned_staff_id, assigned_staff_name = await auto_assign_complaint(final_category, session)
+        assigned_staff_id, assigned_staff_name = await auto_assign_complaint(
+            final_category, session, student_department=student_dept
+        )
         if assigned_staff_id:
             complaint_obj.assigned_to = assigned_staff_id
             complaint_obj.assigned_to_name = assigned_staff_name
@@ -900,7 +963,17 @@ async def get_complaints(current_user: dict = Depends(get_current_user), session
     elif current_user["role"] == UserRole.STAFF:
         # Staff should only see complaints assigned to them
         stmt = stmt.where(Complaint.assigned_to == current_user["id"])
-    # Admin, Principal, HOD see all complaints
+    elif current_user["role"] == UserRole.HOD:
+        # HOD only sees HOD-category complaints (Academic Issues / Staff Behavior)
+        # from their department or assigned to them
+        stmt = stmt.where(
+            Complaint.category.in_(list(HOD_CATEGORIES)),
+            or_(
+                Complaint.assigned_to == current_user["id"],
+                Complaint.student_department == current_user.get("department")
+            )
+        )
+    # Admin, Principal see all complaints
 
     stmt = stmt.order_by(Complaint.created_at.desc()).limit(1000)
     res = await session.execute(stmt)
@@ -981,6 +1054,13 @@ async def update_complaint(complaint_id: str, update_data: ComplaintUpdate, curr
     now = datetime.now(timezone.utc).isoformat()
 
     if update_data.status:
+        # HOD cannot change complaint status (no Accept / Reject / Close)
+        if current_user["role"] == UserRole.HOD:
+            return create_response(
+                False,
+                "HOD cannot accept, reject, or change complaint status. You can only view and assign complaints.",
+                status_code=403
+            )
         complaint_obj.status = update_data.status
         timeline = complaint_obj.timeline or []
         timeline.append({
@@ -1002,6 +1082,20 @@ async def update_complaint(complaint_id: str, update_data: ComplaintUpdate, curr
         complaint_obj.responses = responses
 
     if update_data.assigned_to:
+        # HOD-only categories: only the HOD of the student's department can reassign
+        if complaint_obj.category in HOD_CATEGORIES:
+            if current_user["role"] != UserRole.HOD:
+                return create_response(
+                    False,
+                    f"Only the HOD can reassign '{complaint_obj.category}' complaints.",
+                    status_code=403
+                )
+            if current_user.get("department") != complaint_obj.student_department:
+                return create_response(
+                    False,
+                    "You can only reassign complaints from your own department.",
+                    status_code=403
+                )
         # First, fetch the user to check for conflict of interest
         try:
             user_stmt = select(User).where(User.id == update_data.assigned_to)
@@ -1010,6 +1104,24 @@ async def update_complaint(complaint_id: str, update_data: ComplaintUpdate, curr
             
             if not assigned_user:
                 return create_response(False, "Staff member not found", status_code=404)
+
+            # For HOD-category complaints, target staff must be in the same department
+            if complaint_obj.category in HOD_CATEGORIES:
+                if assigned_user.department != complaint_obj.student_department:
+                    return create_response(
+                        False,
+                        f"Cannot assign to {assigned_user.name} — they are not in the '{complaint_obj.student_department}' department.",
+                        status_code=400
+                    )
+                # HOD can only assign to Assistant Professors within the department
+                if current_user["role"] == UserRole.HOD:
+                    if assigned_user.staff_role != StaffRole.ASSISTANT_PROFESSOR:
+                        return create_response(
+                            False,
+                            f"HOD can only assign Academic/Staff Behaviour complaints to Assistant Professors. "
+                            f"'{assigned_user.name}' has role '{assigned_user.staff_role}'.",
+                            status_code=400
+                        )
             
             # CONFLICT OF INTEREST CHECK: Prevent assigning staff mentioned in the complaint
             from utils.conflict_detection import is_staff_mentioned_in_complaint
@@ -1034,7 +1146,7 @@ async def update_complaint(complaint_id: str, update_data: ComplaintUpdate, curr
             timeline = complaint_obj.timeline or []
             timeline.append({
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "action": f"Assigned to {assigned_user.name}",
+                "action": f"Reassigned to {assigned_user.name}" if complaint_obj.assigned_to else f"Assigned to {assigned_user.name}",
                 "by": current_user["name"]
             })
             complaint_obj.timeline = timeline
@@ -1073,6 +1185,55 @@ async def update_complaint(complaint_id: str, update_data: ComplaintUpdate, curr
         "timeline": complaint_obj.timeline
     }
     return create_response(True, "Complaint updated successfully", data)
+
+@api_router.get("/complaints/{complaint_id}/eligible-staff")
+async def get_eligible_staff(complaint_id: str, current_user: dict = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    """
+    Get list of eligible staff for assignment, filtering out conflicts of interest.
+    - For HOD categories: returns only Assistant Professors in student's department
+    - For other categories: returns all staff
+    - Always filters out staff mentioned in the complaint
+    """
+    complaint = await session.get(Complaint, complaint_id)
+    if not complaint:
+        raise HTTPException(status_code=404, detail="Complaint not found")
+
+    # 1. Base query for staff
+    stmt = select(User).where(User.role == UserRole.STAFF)
+    
+    # 2. Apply HOD-category strict filtering
+    if complaint.category in HOD_CATEGORIES:
+        # Must be in student's department AND Assistant Professor
+        stmt = stmt.where(
+            User.department == complaint.student_department,
+            User.staff_role == StaffRole.ASSISTANT_PROFESSOR
+        )
+    
+    result = await session.execute(stmt)
+    all_staff = result.scalars().all()
+    
+    # 3. Filter out conflicts of interest (mentioned in complaint)
+    from utils.conflict_detection import is_staff_mentioned_in_complaint
+    
+    eligible = []
+    excluded_names = []
+    
+    for staff in all_staff:
+        if is_staff_mentioned_in_complaint(staff.name, complaint.title, complaint.description):
+            excluded_names.append(staff.name)
+        else:
+            eligible.append({
+                "id": staff.id,
+                "name": staff.name,
+                "department": staff.department,
+                "staff_role": staff.staff_role
+            })
+            
+    return {
+        "staff": eligible,
+        "excluded_count": len(excluded_names),
+        "excluded_names": excluded_names
+    }
 
 @api_router.delete("/complaints/{complaint_id}")
 async def delete_complaint(complaint_id: str, confirm: bool = False, current_user: dict = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
@@ -1201,7 +1362,9 @@ async def get_eligible_staff(
 ):
     """
     Get list of staff members eligible to handle this complaint.
-    Excludes staff members who are mentioned in the complaint to prevent conflict of interest.
+    - For HOD categories (Academic Issues, Staff Behavior): returns only staff in the
+      student's department (only HOD of that department may call this).
+    - For all other categories: returns all staff, excluding those mentioned in the complaint.
     """
     # Only HOD/Principal/Admin can access this
     if current_user["role"] not in [UserRole.HOD, UserRole.PRINCIPAL, UserRole.ADMIN]:
@@ -1210,9 +1373,31 @@ async def get_eligible_staff(
     complaint = await session.get(Complaint, complaint_id)
     if not complaint:
         return create_response(False, "Complaint not found", status_code=404)
+
+    # HOD-category complaints: only departmental HOD can fetch, scoped to department
+    is_hod_category = complaint.category in HOD_CATEGORIES
+    if is_hod_category:
+        if current_user["role"] != UserRole.HOD:
+            return create_response(
+                False,
+                f"Only the HOD can reassign '{complaint.category}' complaints.",
+                status_code=403
+            )
+        if current_user.get("department") != complaint.student_department:
+            return create_response(
+                False,
+                "You can only view eligible staff for complaints from your department.",
+                status_code=403
+            )
+        # Fetch staff in the same department (staff + hod roles)
+        stmt = select(User).where(
+            User.role.in_([UserRole.STAFF, UserRole.HOD]),
+            User.department == complaint.student_department
+        )
+    else:
+        # All staff for non-HOD categories
+        stmt = select(User).where(User.role == UserRole.STAFF)
     
-    # Get all staff
-    stmt = select(User).where(User.role == UserRole.STAFF)
     res = await session.execute(stmt)
     all_staff = res.scalars().all()
     
@@ -1221,7 +1406,7 @@ async def get_eligible_staff(
     eligible_staff, excluded_staff = get_eligible_staff_for_assignment(complaint, all_staff)
     
     eligible_list = [
-        {"id": s.id, "name": s.name, "department": s.department}
+        {"id": s.id, "name": s.name, "department": s.department, "staff_role": s.staff_role}
         for s in eligible_staff
     ]
     
@@ -1235,7 +1420,8 @@ async def get_eligible_staff(
         {
             "staff": eligible_list,
             "excluded_count": len(excluded_staff),
-            "excluded_names": excluded_names  # For admin visibility
+            "excluded_names": excluded_names,
+            "is_hod_category": is_hod_category
         }
     )
 
