@@ -62,16 +62,38 @@ export const PRIORITY_LEVELS = {
 export type PriorityLevel = (typeof PRIORITY_LEVELS)[keyof typeof PRIORITY_LEVELS]
 
 export const COMPLAINT_CATEGORIES = [
-  "Hostel",
-  "Exam Cell",
-  "Transport",
-  "Staff Behavior",
-  "Academic Issues",
-  "Infrastructure",
-  "Cafeteria",
-  "Library",
   "Sports",
+  "Library",
+  "Discipline",
+  "Exam Cell",
+  "Accounts/Fees",
+  "Transport",
+  "Scholarship",
+  "Placement/Training",
+  "Hostel",
+  "Infrastructure",
+  "Lab",
+  "Academic Issues",
+  "Staff Behavior",
   "Other",
 ] as const
 
 export type ComplaintCategory = (typeof COMPLAINT_CATEGORIES)[number]
+
+export const STAFF_ROLES = [
+  "Assistant Professor",
+  "Lab Assistant",
+  "Librarian",
+  "Physical Director",
+  "Discipline Coordinator",
+  "Exam Cell Coordinator",
+  "Accountant",
+  "Clerk",
+  "Transport Manager",
+  "Scholarship Coordinator",
+  "Placement & Training Coordinator",
+  "Warden",
+  "Infrastructure Coordinator",
+] as const
+
+export type StaffRoleType = (typeof STAFF_ROLES)[number]

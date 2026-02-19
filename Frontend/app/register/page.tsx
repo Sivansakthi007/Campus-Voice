@@ -17,7 +17,7 @@ import {
   EyeOff,
   ArrowLeft,
 } from "lucide-react"
-import { USER_ROLES, ROLE_COLORS, type UserRole } from "@/lib/constants"
+import { USER_ROLES, ROLE_COLORS, STAFF_ROLES, type UserRole } from "@/lib/constants"
 
 const ROLE_OPTIONS = [
   { value: USER_ROLES.STUDENT, label: "Student", icon: GraduationCap, description: "Submit and track complaints" },
@@ -37,6 +37,7 @@ export default function RegisterPage() {
     confirmPassword: "",
     department: "",
     idNumber: "",
+    staffRole: "",
   })
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -76,6 +77,10 @@ export default function RegisterPage() {
           ...(selectedRole === USER_ROLES.STUDENT
             ? { student_id: formData.idNumber }
             : { staff_id: formData.idNumber }),
+          // Send staff_role only for staff
+          ...(selectedRole === USER_ROLES.STAFF && formData.staffRole
+            ? { staff_role: formData.staffRole }
+            : {}),
         }),
       })
 
@@ -177,6 +182,20 @@ export default function RegisterPage() {
               value={formData.idNumber}
               onChange={(e) => setFormData({ ...formData, idNumber: e.target.value })}
             />
+
+            {selectedRole === USER_ROLES.STAFF && (
+              <select
+                required
+                className="w-full p-3 rounded bg-black/30 text-white"
+                value={formData.staffRole}
+                onChange={(e) => setFormData({ ...formData, staffRole: e.target.value })}
+              >
+                <option value="" disabled>Select Staff Role</option>
+                {STAFF_ROLES.map((role) => (
+                  <option key={role} value={role}>{role}</option>
+                ))}
+              </select>
+            )}
 
             <input
               type="password"

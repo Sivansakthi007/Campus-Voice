@@ -114,11 +114,53 @@ class ComplaintStatus(str):
     REJECTED = "rejected"
 
 class ComplaintCategory(str):
-    HOSTEL = "Hostel"
+    SPORTS = "Sports"
+    LIBRARY = "Library"
+    DISCIPLINE = "Discipline"
     EXAM_CELL = "Exam Cell"
+    ACCOUNTS_FEES = "Accounts/Fees"
     TRANSPORT = "Transport"
-    STAFF_BEHAVIOR = "Staff Behavior"
+    SCHOLARSHIP = "Scholarship"
+    PLACEMENT_TRAINING = "Placement/Training"
+    HOSTEL = "Hostel"
+    INFRASTRUCTURE = "Infrastructure"
+    LAB = "Lab"
     ACADEMIC = "Academic Issues"
+    STAFF_BEHAVIOR = "Staff Behavior"
+    OTHER = "Other"
+
+# Staff Role options for registration
+class StaffRole(str):
+    ASSISTANT_PROFESSOR = "Assistant Professor"
+    LAB_ASSISTANT = "Lab Assistant"
+    LIBRARIAN = "Librarian"
+    PHYSICAL_DIRECTOR = "Physical Director"
+    DISCIPLINE_COORDINATOR = "Discipline Coordinator"
+    EXAM_CELL_COORDINATOR = "Exam Cell Coordinator"
+    ACCOUNTANT = "Accountant"
+    CLERK = "Clerk"
+    TRANSPORT_MANAGER = "Transport Manager"
+    SCHOLARSHIP_COORDINATOR = "Scholarship Coordinator"
+    PLACEMENT_TRAINING_COORDINATOR = "Placement & Training Coordinator"
+    WARDEN = "Warden"
+    INFRASTRUCTURE_COORDINATOR = "Infrastructure Coordinator"
+
+# Mapping: Complaint Category -> Staff Role for auto-assignment
+CATEGORY_TO_STAFF_ROLE = {
+    "Sports": "Physical Director",
+    "Library": "Librarian",
+    "Discipline": "Discipline Coordinator",
+    "Exam Cell": "Exam Cell Coordinator",
+    "Accounts/Fees": "Accountant",
+    "Transport": "Transport Manager",
+    "Scholarship": "Scholarship Coordinator",
+    "Placement/Training": "Placement & Training Coordinator",
+    "Hostel": "Warden",
+    "Infrastructure": "Infrastructure Coordinator",
+    "Lab": "Lab Assistant",
+    "Academic Issues": "Assistant Professor",
+    "Staff Behavior": "Assistant Professor",
+}
 
 class SentimentType(str):
     POSITIVE = "Positive"
@@ -146,6 +188,7 @@ class UserCreate(BaseModel):
     department: Optional[str] = None
     student_id: Optional[str] = None
     staff_id: Optional[str] = None
+    staff_role: Optional[str] = None
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -160,6 +203,7 @@ class UserResponse(BaseModel):
     department: Optional[str] = None
     student_id: Optional[str] = None
     staff_id: Optional[str] = None
+    staff_role: Optional[str] = None
     created_at: str
 
 class TokenResponse(BaseModel):
@@ -313,6 +357,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             "department": user.department,
             "student_id": stored_id if is_student else None,
             "staff_id": stored_id if not is_student else None,
+            "staff_role": user.staff_role,
             "created_at": user.created_at.isoformat() if user.created_at else None
         }
     except jwt.ExpiredSignatureError:
@@ -340,7 +385,7 @@ async def analyze_complaint_with_ai(text: str) -> AIAnalysis:
         system_message = """You are an AI assistant that analyzes student complaints. 
             Analyze the complaint and respond ONLY with a JSON object (no markdown, no explanation) with these exact keys:
             - sentiment: one of [Positive, Negative, Angry, Urgent]
-            - category: one of [Hostel, Exam Cell, Transport, Staff Behavior, Academic Issues]
+            - category: one of [Sports, Library, Discipline, Exam Cell, Accounts/Fees, Transport, Scholarship, Placement/Training, Hostel, Infrastructure, Lab, Academic Issues, Staff Behavior, Other]
             - priority: one of [High, Medium, Low]
             - foul_language_detected: boolean (true if foul/offensive language is present)
             - foul_language_severity: one of [None, Mild, Moderate, Severe]
@@ -454,7 +499,8 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_se
         name=user_data.name,
         role=user_data.role,
         department=user_data.department,
-        student_id=stored_id  # Polymorphic: stores student_id or staff_id
+        student_id=stored_id,  # Polymorphic: stores student_id or staff_id
+        staff_role=user_data.staff_role if user_data.role != UserRole.STUDENT else None
     )
     session.add(user_obj)
     await session.commit()
@@ -474,6 +520,7 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_se
         department=user_obj.department,
         student_id=stored_id if is_student_role else None,
         staff_id=stored_id if not is_student_role else None,
+        staff_role=user_obj.staff_role,
         created_at=user_obj.created_at.isoformat() if user_obj.created_at else None
     )
 
@@ -505,6 +552,7 @@ async def login(credentials: UserLogin, session: AsyncSession = Depends(get_sess
         department=user_obj.department,
         student_id=stored_id if is_student_role else None,
         staff_id=stored_id if not is_student_role else None,
+        staff_role=user_obj.staff_role,
         created_at=user_obj.created_at.isoformat() if user_obj.created_at else None
     )
 
@@ -541,6 +589,7 @@ async def list_users(role: Optional[str] = None, current_user: dict = Depends(ge
             "department": u.department,
             "student_id": stored_id if is_student else None,
             "staff_id": stored_id if not is_student else None,
+            "staff_role": u.staff_role,
             "created_at": u.created_at.isoformat() if u.created_at else None,
         }
 
@@ -619,6 +668,48 @@ async def get_profile_photo(user_id: str):
     from fastapi.responses import RedirectResponse
     return RedirectResponse(dicebear_url)
 
+# ===== AUTO-ASSIGNMENT HELPER =====
+async def auto_assign_complaint(category: str, session: AsyncSession):
+    """Auto-assign complaint to staff based on category→role mapping.
+    Picks the staff member with fewest active (non-resolved) complaints.
+    Returns (staff_id, staff_name) or (None, None)."""
+    target_role = CATEGORY_TO_STAFF_ROLE.get(category)
+    if not target_role:
+        logger.info(f"No staff role mapping for category '{category}', skipping auto-assign")
+        return None, None
+
+    # Find all staff with the matching staff_role
+    staff_stmt = select(User).where(
+        User.role == UserRole.STAFF,
+        User.staff_role == target_role
+    )
+    result = await session.execute(staff_stmt)
+    staff_list = result.scalars().all()
+
+    if not staff_list:
+        logger.info(f"No staff found with role '{target_role}' for category '{category}'")
+        return None, None
+
+    # Pick staff with fewest active (non-resolved, non-rejected) complaints
+    best_staff = None
+    min_count = float('inf')
+    for staff in staff_list:
+        count_stmt = select(func.count(Complaint.id)).where(
+            Complaint.assigned_to == staff.id,
+            Complaint.status.notin_([ComplaintStatus.RESOLVED, ComplaintStatus.REJECTED])
+        )
+        count_result = await session.execute(count_stmt)
+        active_count = count_result.scalar() or 0
+        if active_count < min_count:
+            min_count = active_count
+            best_staff = staff
+
+    if best_staff:
+        logger.info(f"Auto-assigning to staff '{best_staff.name}' (role: {target_role}, active: {min_count})")
+        return best_staff.id, best_staff.name
+
+    return None, None
+
 # ===== COMPLAINT ENDPOINTS =====
 @api_router.post("/complaints", response_model=ComplaintResponse, status_code=201)
 async def create_complaint(complaint_data: ComplaintCreate, current_user: dict = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
@@ -694,6 +785,18 @@ async def create_complaint(complaint_data: ComplaintCreate, current_user: dict =
         ]
     )
 
+    # Auto-assign complaint based on category → staff role mapping
+    assigned_staff_id, assigned_staff_name = await auto_assign_complaint(final_category, session)
+    if assigned_staff_id:
+        complaint_obj.assigned_to = assigned_staff_id
+        complaint_obj.assigned_to_name = assigned_staff_name
+        complaint_obj.assigned_at = datetime.now(timezone.utc)
+        complaint_obj.timeline.append({
+            "status": "auto_assigned",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "note": f"Auto-assigned to {assigned_staff_name}"
+        })
+
     session.add(complaint_obj)
     
     # Debug logging before commit
@@ -703,7 +806,7 @@ async def create_complaint(complaint_data: ComplaintCreate, current_user: dict =
     await session.refresh(complaint_obj)
     
     # Debug logging after commit
-    logger.info(f"Complaint created - ID: {complaint_obj.id}, student_id saved: {complaint_obj.student_id}")
+    logger.info(f"Complaint created - ID: {complaint_obj.id}, student_id saved: {complaint_obj.student_id}, assigned_to: {complaint_obj.assigned_to}")
 
     response_data = {
         "id": complaint_obj.id,
