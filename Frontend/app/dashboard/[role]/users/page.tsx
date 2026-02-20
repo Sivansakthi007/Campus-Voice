@@ -18,6 +18,7 @@ import { ROLE_COLORS } from "@/lib/constants"
 import { Users, Search, Plus, Edit, Trash2, Shield, X } from "lucide-react"
 import { apiClient } from "@/lib/api"
 import type { RegisterRequest } from "@/lib/api"
+import { STAFF_ROLES } from "@/lib/constants"
 import { useEffect } from "react"
 
 interface UserData {
@@ -26,6 +27,7 @@ interface UserData {
   email: string
   role: string
   department: string | null
+  staff_role: string | null
   created_at: string | null
 }
 
@@ -34,6 +36,7 @@ export default function UserManagementPage({ params }: { params: Promise<{ role:
   const colors = ROLE_COLORS[role]
   const [searchTerm, setSearchTerm] = useState("")
   const [filterRole, setFilterRole] = useState<string>("all")
+  const [filterStaffRole, setFilterStaffRole] = useState<string>("all")
   const [users, setUsers] = useState<UserData[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -49,6 +52,7 @@ export default function UserManagementPage({ params }: { params: Promise<{ role:
   const [formPassword, setFormPassword] = useState("")
   const [formRole, setFormRole] = useState("student")
   const [formDepartment, setFormDepartment] = useState("")
+  const [formStaffRole, setFormStaffRole] = useState("")
 
   useEffect(() => {
     async function fetchUsers() {
@@ -62,6 +66,7 @@ export default function UserManagementPage({ params }: { params: Promise<{ role:
           email: u.email,
           role: u.role,
           department: u.department || "N/A",
+          staff_role: u.staff_role || null,
           created_at: u.created_at,
         }))
         setUsers(mappedUsers)
@@ -85,6 +90,7 @@ export default function UserManagementPage({ params }: { params: Promise<{ role:
         email: u.email,
         role: u.role,
         department: u.department || "N/A",
+        staff_role: u.staff_role || null,
         created_at: u.created_at,
       }))
       setUsers(mappedUsers)
@@ -104,6 +110,7 @@ export default function UserManagementPage({ params }: { params: Promise<{ role:
         password: formPassword,
         role: formRole as any,
         department: formDepartment || undefined,
+        staff_role: formRole === "staff" ? formStaffRole : undefined,
       }
       await apiClient.createUser(userData)
       await refetchUsers()
@@ -114,6 +121,7 @@ export default function UserManagementPage({ params }: { params: Promise<{ role:
       setFormPassword("")
       setFormRole("student")
       setFormDepartment("")
+      setFormStaffRole("")
     } catch (error) {
       console.error("Failed to add user:", error)
     } finally {
@@ -142,7 +150,8 @@ export default function UserManagementPage({ params }: { params: Promise<{ role:
       user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesRole = filterRole === "all" || user.role === filterRole
-    return matchesSearch && matchesRole
+    const matchesStaffRole = filterStaffRole === "all" || user.staff_role === filterStaffRole
+    return matchesSearch && matchesRole && matchesStaffRole
   })
 
   const stats = {
@@ -216,7 +225,10 @@ export default function UserManagementPage({ params }: { params: Promise<{ role:
               </div>
               <select
                 value={filterRole}
-                onChange={(e) => setFilterRole(e.target.value)}
+                onChange={(e) => {
+                  setFilterRole(e.target.value)
+                  if (e.target.value !== "staff") setFilterStaffRole("all")
+                }}
                 className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-white/30"
               >
                 <option value="all">All Roles</option>
@@ -226,6 +238,19 @@ export default function UserManagementPage({ params }: { params: Promise<{ role:
                 <option value="principal">Principal</option>
                 <option value="admin">Admin</option>
               </select>
+
+              {filterRole === "staff" && (
+                <select
+                  value={filterStaffRole}
+                  onChange={(e) => setFilterStaffRole(e.target.value)}
+                  className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-white/30"
+                >
+                  <option value="all">All Staff Roles</option>
+                  {STAFF_ROLES.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
 
@@ -242,6 +267,7 @@ export default function UserManagementPage({ params }: { params: Promise<{ role:
                   <tr className="border-b border-white/10">
                     <th className="text-left p-4 text-sm font-semibold text-gray-400">User</th>
                     <th className="text-left p-4 text-sm font-semibold text-gray-400">Role</th>
+                    <th className="text-left p-4 text-sm font-semibold text-gray-400">Staff Role</th>
                     <th className="text-left p-4 text-sm font-semibold text-gray-400">Department</th>
                     <th className="text-left p-4 text-sm font-semibold text-gray-400">Status</th>
                     <th className="text-left p-4 text-sm font-semibold text-gray-400">Joined</th>
@@ -280,6 +306,7 @@ export default function UserManagementPage({ params }: { params: Promise<{ role:
                           {user.role.toUpperCase()}
                         </span>
                       </td>
+                      <td className="p-4 text-gray-300">{user.staff_role || "N/A"}</td>
                       <td className="p-4 text-gray-300">{user.department}</td>
                       <td className="p-4">
                         <span
@@ -356,6 +383,19 @@ export default function UserManagementPage({ params }: { params: Promise<{ role:
                 <option value="principal">Principal</option>
                 <option value="admin">Admin</option>
               </select>
+              {formRole === "staff" && (
+                <select
+                  value={formStaffRole}
+                  onChange={(e) => setFormStaffRole(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-white/30"
+                  required
+                >
+                  <option value="" disabled>Select Staff Role</option>
+                  {STAFF_ROLES.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              )}
               <input
                 type="text"
                 placeholder="Department (optional)"

@@ -7,8 +7,9 @@ import { motion } from "framer-motion"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Chatbot } from "@/components/chatbot"
 import { ROLE_COLORS } from "@/lib/constants"
-import { Search, Filter, Award, Mail, Phone, Loader2, Users } from "lucide-react"
+import { Search, Filter, Award, Mail, Phone, Loader2, Users, X } from "lucide-react"
 import { apiClient } from "@/lib/api"
+import { STAFF_ROLES } from "@/lib/constants"
 
 interface StaffMember {
   id: string
@@ -20,16 +21,20 @@ interface StaffMember {
   resolvedComplaints: number
   avgResolutionTime: string
   rating: number | string
+  staff_role: string
   status: string
 }
 
-export default function StaffManagementPage({ params }: { params: { role: string } }) {
+export default function StaffManagementPage({ params }: { params: Promise<{ role: string }> }) {
   const { role } = React.use(params) as { role: "hod" | "principal" }
   const colors = ROLE_COLORS[role]
   const [searchTerm, setSearchTerm] = useState("")
+  const [filterStaffRole, setFilterStaffRole] = useState<string>("all")
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null)
+  const [isDetailOpen, setIsDetailOpen] = useState(false)
 
   useEffect(() => {
     const fetchStaffData = async () => {
@@ -65,6 +70,7 @@ export default function StaffManagementPage({ params }: { params: { role: string
             resolvedComplaints: perf.resolved_complaints || 0,
             avgResolutionTime: perf.avg_resolution_time || "N/A",
             rating: perf.resolution_rate ? parseFloat((perf.resolution_rate / 20).toFixed(1)) : 0,
+            staff_role: user.staff_role || "N/A",
             status: "active",
           }
         })
@@ -83,8 +89,10 @@ export default function StaffManagementPage({ params }: { params: { role: string
 
   const filteredStaff = staffMembers.filter(
     (staff) =>
-      staff.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      staff.department.toLowerCase().includes(searchTerm.toLowerCase()),
+      (staff.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        staff.department.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        staff.staff_role.toLowerCase().includes(searchTerm.toLowerCase())) &&
+      (filterStaffRole === "all" || staff.staff_role === filterStaffRole)
   )
 
   return (
@@ -107,16 +115,21 @@ export default function StaffManagementPage({ params }: { params: { role: string
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search by name or department..."
+                  placeholder="Search by name, department or role..."
                   className="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-white/30"
                 />
               </div>
-              <button
-                className={`flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r ${colors.gradient} text-white hover:opacity-90 transition-opacity`}
+
+              <select
+                value={filterStaffRole}
+                onChange={(e) => setFilterStaffRole(e.target.value)}
+                className="bg-white/5 border border-white/10 rounded-xl px-6 py-3 text-white focus:outline-none focus:border-white/30"
               >
-                <Filter className="w-5 h-5" />
-                Filter
-              </button>
+                <option value="all">All Roles</option>
+                {STAFF_ROLES.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -173,7 +186,8 @@ export default function StaffManagementPage({ params }: { params: { role: string
                       </div>
                       <div>
                         <h3 className="text-lg font-bold text-white">{staff.name}</h3>
-                        <p className="text-sm text-gray-400">{staff.department}</p>
+                        <p className={`text-sm font-semibold ${colors.text}`}>{staff.staff_role}</p>
+                        <p className="text-xs text-gray-400">{staff.department}</p>
                         <div className="flex items-center gap-2 mt-1">
                           <Award className="w-4 h-4 text-yellow-400" />
                           <span className="text-sm text-yellow-400">{staff.rating}/5.0</span>
@@ -215,6 +229,10 @@ export default function StaffManagementPage({ params }: { params: { role: string
 
                   <div className="mt-4 pt-4 border-t border-white/10">
                     <button
+                      onClick={() => {
+                        setSelectedStaff(staff)
+                        setIsDetailOpen(true)
+                      }}
                       className={`w-full py-2 rounded-xl bg-gradient-to-r ${colors.gradient} text-white hover:opacity-90 transition-opacity`}
                     >
                       View Details
@@ -226,6 +244,103 @@ export default function StaffManagementPage({ params }: { params: { role: string
           )}
         </motion.div>
       </main>
+      {/* Detail Modal */}
+      {isDetailOpen && selectedStaff && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="glass-card w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl border border-white/10"
+          >
+            <div className={`p-6 bg-gradient-to-r ${colors.gradient} flex justify-between items-center`}>
+              <h2 className="text-2xl font-bold text-white">Staff Details</h2>
+              <button
+                onClick={() => setIsDetailOpen(false)}
+                className="p-2 hover:bg-white/20 rounded-full transition-colors"
+              >
+                <X className="w-6 h-6 text-white" />
+              </button>
+            </div>
+
+            <div className="p-8">
+              <div className="flex items-center gap-6 mb-8">
+                <div className={`w-24 h-24 rounded-2xl bg-gradient-to-br ${colors.gradient} flex items-center justify-center text-4xl font-bold text-white shadow-lg`}>
+                  {selectedStaff.name.split(" ").map(n => n[0]).join("")}
+                </div>
+                <div>
+                  <h3 className="text-3xl font-bold text-white mb-1">{selectedStaff.name}</h3>
+                  <div className="flex items-center gap-2">
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${colors.text} bg-white/10 border border-white/5`}>
+                      {selectedStaff.staff_role}
+                    </span>
+                    <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-xs font-bold uppercase">
+                      {selectedStaff.status}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-6">
+                  <div>
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Basic Information</p>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3 text-gray-300">
+                        <Mail className="w-5 h-5 text-gray-500" />
+                        <span>{selectedStaff.email}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-gray-300">
+                        <Phone className="w-5 h-5 text-gray-500" />
+                        <span>{selectedStaff.phone || "No phone provided"}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-gray-300">
+                        <Users className="w-5 h-5 text-gray-500" />
+                        <span>{selectedStaff.department}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div>
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Performance Metrics</p>
+                    <div className="p-4 bg-white/5 rounded-2xl border border-white/5 space-y-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-400">Resolution Rate</span>
+                        <div className="flex items-center gap-2">
+                          <Award className="w-4 h-4 text-yellow-400" />
+                          <span className="text-lg font-bold text-white">{selectedStaff.rating}/5.0</span>
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-400">Assigned Complaints</span>
+                        <span className="text-lg font-bold text-white">{selectedStaff.assignedComplaints}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-400">Resolved Complaints</span>
+                        <span className="text-emerald-400 font-bold">{selectedStaff.resolvedComplaints}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-400">Avg Resolution Time</span>
+                        <span className="text-white font-medium">{selectedStaff.avgResolutionTime}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8 pt-6 border-t border-white/10 flex justify-end">
+                <button
+                  onClick={() => setIsDetailOpen(false)}
+                  className="px-8 py-3 rounded-xl border border-white/10 text-white hover:bg-white/5 transition-colors font-medium"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
       <Chatbot role={role} />
     </div>
   )

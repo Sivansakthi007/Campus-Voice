@@ -19,9 +19,10 @@ interface StaffMember {
   phone?: string
   department?: string
   role?: string
+  staff_role?: string
 }
 
-export default function StaffReportPage({ params }: { params: { role: string } }) {
+export default function StaffReportPage({ params }: { params: Promise<{ role: string }> }) {
   const { role } = React.use(params) as { role: UserRole }
   const router = useRouter()
   const [searchQuery, setSearchQuery] = useState("")
@@ -39,27 +40,28 @@ export default function StaffReportPage({ params }: { params: { role: string } }
   useEffect(() => {
     let cancelled = false
 
-    ;(async () => {
-      try {
-        const users = await apiClient.getUsers("staff")
-        // Ensure only role === 'staff' are used and map to expected fields
-        const filtered = (users || [])
-          .filter((u: any) => u.role === "staff")
-          .map((u: any) => ({
-            id: u.id || u.user_id || u._id || String(u.email),
-            name: u.name || "",
-            email: u.email || "",
-            department: u.department || "",
-            phone: u.phone || u.mobile || "",
-            role: u.role || "",
-          }))
+      ; (async () => {
+        try {
+          const users = await apiClient.getUsers("staff")
+          // Ensure only role === 'staff' are used and map to expected fields
+          const filtered = (users || [])
+            .filter((u: any) => u.role === "staff")
+            .map((u: any) => ({
+              id: u.id || u.user_id || u._id || String(u.email),
+              name: u.name || "",
+              email: u.email || "",
+              department: u.department || "",
+              phone: u.phone || u.mobile || "",
+              role: u.role || "",
+              staff_role: u.staff_role || "",
+            }))
 
-        if (!cancelled) setStaffList(filtered)
-      } catch (err) {
-        console.error("Failed to fetch staff:", err)
-        if (!cancelled) setStaffList([])
-      }
-    })()
+          if (!cancelled) setStaffList(filtered)
+        } catch (err) {
+          console.error("Failed to fetch staff:", err)
+          if (!cancelled) setStaffList([])
+        }
+      })()
 
     return () => {
       cancelled = true
@@ -69,6 +71,7 @@ export default function StaffReportPage({ params }: { params: { role: string } }
   const filteredStaff = staffList.filter(
     (staff) =>
       staff.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (staff.staff_role || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
       (staff.department || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
       staff.email.toLowerCase().includes(searchQuery.toLowerCase()),
   )
@@ -118,7 +121,7 @@ export default function StaffReportPage({ params }: { params: { role: string } }
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-semibold text-white truncate">{staff.name}</h3>
-                      <p className="text-sm text-gray-400">{staff.role}</p>
+                      <p className="text-sm text-gray-400">{staff.staff_role || "Staff Member"}</p>
                     </div>
                   </div>
 

@@ -429,6 +429,7 @@ class ApiClient {
     Array<{
       staff_id: string
       staff_name: string
+      staff_role: string | null
       total_complaints: number
       resolved_complaints: number
       pending_complaints: number
@@ -439,6 +440,7 @@ class ApiClient {
       Array<{
         staff_id: string
         staff_name: string
+        staff_role: string | null
         total_complaints: number
         resolved_complaints: number
         pending_complaints: number
@@ -600,6 +602,7 @@ class ApiClient {
     staff_performance: Array<{
       staff_id: string
       staff_name: string
+      staff_role: string | null
       department: string | null
       average_rating: number
       total_ratings: number
@@ -619,6 +622,7 @@ class ApiClient {
       staff_performance: Array<{
         staff_id: string
         staff_name: string
+        staff_role: string | null
         department: string | null
         average_rating: number
         total_ratings: number

@@ -12,6 +12,7 @@ import { toast } from "sonner"
 interface StaffPerformance {
     staff_id: string
     staff_name: string
+    staff_role: string | null
     department: string | null
     average_rating: number
     total_ratings: number
@@ -94,10 +95,10 @@ export default function StaffPerformanceReportPage({ params }: { params: Promise
                     <Star
                         key={i}
                         className={`w-4 h-4 ${i < fullStars
-                                ? "fill-yellow-400 text-yellow-400"
-                                : i === fullStars && hasHalf
-                                    ? "fill-yellow-400/50 text-yellow-400"
-                                    : "text-gray-500"
+                            ? "fill-yellow-400 text-yellow-400"
+                            : i === fullStars && hasHalf
+                                ? "fill-yellow-400/50 text-yellow-400"
+                                : "text-gray-500"
                             }`}
                     />
                 ))}
@@ -126,8 +127,8 @@ export default function StaffPerformanceReportPage({ params }: { params: Promise
                             onClick={handleDownloadPDF}
                             disabled={downloading || !report?.staff_performance?.length}
                             className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all ${downloading || !report?.staff_performance?.length
-                                    ? "bg-gray-700 text-gray-400 cursor-not-allowed"
-                                    : "bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:shadow-lg hover:shadow-emerald-500/25"
+                                ? "bg-gray-700 text-gray-400 cursor-not-allowed"
+                                : "bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:shadow-lg hover:shadow-emerald-500/25"
                                 }`}
                         >
                             {downloading ? (
@@ -238,6 +239,7 @@ export default function StaffPerformanceReportPage({ params }: { params: Promise
                                                 </span>
                                             </div>
                                             <p className="text-gray-400">
+                                                {report.staff_performance[0].staff_role || "Staff Member"} •
                                                 {report.staff_performance[0].department || "Department N/A"} •
                                                 Average Rating: {report.staff_performance[0].average_rating.toFixed(2)}/5.0 •
                                                 {report.staff_performance[0].total_ratings} rating{report.staff_performance[0].total_ratings !== 1 ? "s" : ""}
@@ -265,6 +267,7 @@ export default function StaffPerformanceReportPage({ params }: { params: Promise
                                             <tr className="border-b border-white/10">
                                                 <th className="px-6 py-4 text-left text-sm font-medium text-gray-400">Rank</th>
                                                 <th className="px-6 py-4 text-left text-sm font-medium text-gray-400">Staff Name</th>
+                                                <th className="px-6 py-4 text-left text-sm font-medium text-gray-400">Staff Role</th>
                                                 <th className="px-6 py-4 text-left text-sm font-medium text-gray-400">Department</th>
                                                 <th className="px-6 py-4 text-left text-sm font-medium text-gray-400">Average Rating</th>
                                                 <th className="px-6 py-4 text-left text-sm font-medium text-gray-400">Total Ratings</th>
@@ -280,13 +283,14 @@ export default function StaffPerformanceReportPage({ params }: { params: Promise
                                                 >
                                                     <td className="px-6 py-4">
                                                         <span className={`text-lg font-bold ${index === 0 ? "text-yellow-400" :
-                                                                index === 1 ? "text-gray-300" :
-                                                                    index === 2 ? "text-amber-600" : "text-gray-500"
+                                                            index === 1 ? "text-gray-300" :
+                                                                index === 2 ? "text-amber-600" : "text-gray-500"
                                                             }`}>
                                                             #{index + 1}
                                                         </span>
                                                     </td>
                                                     <td className="px-6 py-4 text-white font-medium">{staff.staff_name}</td>
+                                                    <td className="px-6 py-4 text-gray-300">{staff.staff_role || "N/A"}</td>
                                                     <td className="px-6 py-4 text-gray-400">{staff.department || "N/A"}</td>
                                                     <td className="px-6 py-4">{renderStars(staff.average_rating)}</td>
                                                     <td className="px-6 py-4 text-gray-300">{staff.total_ratings}</td>

@@ -261,6 +261,17 @@ export default function ProfilePage({ params }: { params: Promise<{ role: string
                     )}
                   </div>
 
+                  {/* Staff Role (Conditional) */}
+                  {user?.role === "staff" && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-400 mb-2">Staff Role</label>
+                      <div className="flex items-center gap-3 glass-card rounded-xl p-4">
+                        <User className="w-5 h-5 text-gray-400" />
+                        <span className="text-white">{user?.staff_role || "Not specified"}</span>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Department */}
                   <div>
                     <label className="block text-sm font-medium text-gray-400 mb-2">Department</label>

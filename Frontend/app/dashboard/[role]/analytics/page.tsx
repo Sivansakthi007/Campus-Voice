@@ -24,6 +24,13 @@ export default function AnalyticsPage({ params }: { params: Promise<{ role: stri
   const [categoryStats, setCategoryStats] = useState<Record<string, number>>({})
 
   useEffect(() => {
+    // Role verification
+    const allowedRoles = ["admin", "principal", "hod"]
+    if (!allowedRoles.includes(role)) {
+      router.push(`/dashboard/${role}`)
+      return
+    }
+
     const fetchAnalytics = async () => {
       try {
         const data = await apiClient.getAnalyticsOverview()

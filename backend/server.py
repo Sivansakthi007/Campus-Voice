@@ -306,6 +306,7 @@ class SupportVote(BaseModel):
 class StaffPerformance(BaseModel):
     staff_id: str
     staff_name: str
+    staff_role: Optional[str] = None
     total_complaints: int
     resolved_complaints: int
     pending_complaints: int
@@ -340,6 +341,7 @@ class StaffPerformanceRating(BaseModel):
     """Staff performance data for HOD weekly report."""
     staff_id: str
     staff_name: str
+    staff_role: Optional[str] = None
     department: Optional[str]
     average_rating: float
     total_ratings: int
@@ -632,11 +634,18 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 
 
 @api_router.get("/users")
-async def list_users(role: Optional[str] = None, current_user: dict = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+async def list_users(
+    role: Optional[str] = None,
+    staff_role: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
     # Only authenticated users can list users; restrict sensitive info
     stmt = select(User)
     if role:
         stmt = stmt.where(User.role == role)
+    if staff_role:
+        stmt = stmt.where(User.staff_role == staff_role)
 
     res = await session.execute(stmt)
     users = res.scalars().all()
@@ -1504,6 +1513,7 @@ async def get_staff_performance(current_user: dict = Depends(get_current_user), 
         performance.append({
             "staff_id": staff.id,
             "staff_name": staff.name,
+            "staff_role": staff.staff_role,
             "total_complaints": assigned,
             "resolved_complaints": resolved,
             "pending_complaints": pending,
@@ -2034,6 +2044,7 @@ async def get_weekly_staff_performance(
     stmt = select(
         StaffRating.staff_id,
         User.name.label("staff_name"),
+        User.staff_role,
         User.department,
         func.avg(
             (StaffRating.subject_knowledge + 
@@ -2049,7 +2060,7 @@ async def get_weekly_staff_performance(
         StaffRating.week_number == target_week,
         StaffRating.year == target_year
     ).group_by(
-        StaffRating.staff_id, User.name, User.department
+        StaffRating.staff_id, User.name, User.staff_role, User.department
     ).order_by(
         func.avg(
             (StaffRating.subject_knowledge + 
@@ -2072,6 +2083,7 @@ async def get_weekly_staff_performance(
         performance_data.append({
             "staff_id": row.staff_id,
             "staff_name": row.staff_name,
+            "staff_role": row.staff_role,
             "department": row.department,
             "average_rating": round(float(row.avg_rating), 2),
             "total_ratings": row.total_ratings,
@@ -2118,6 +2130,7 @@ async def download_weekly_performance_pdf(
     stmt = select(
         StaffRating.staff_id,
         User.name.label("staff_name"),
+        User.staff_role,
         User.department,
         func.avg(
             (StaffRating.subject_knowledge + 
@@ -2133,7 +2146,7 @@ async def download_weekly_performance_pdf(
         StaffRating.week_number == target_week,
         StaffRating.year == target_year
     ).group_by(
-        StaffRating.staff_id, User.name, User.department
+        StaffRating.staff_id, User.name, User.staff_role, User.department
     ).order_by(
         func.avg(
             (StaffRating.subject_knowledge + 
@@ -2194,24 +2207,23 @@ async def download_weekly_performance_pdf(
             elements.append(Paragraph("<b>Staff Performance Rankings</b>", styles['Heading2']))
             elements.append(Spacer(1, 10))
             
-            table_data = [["Rank", "Staff Name", "Department", "Avg Rating", "Total Ratings", "Badge"]]
+            table_data = [["Rank", "Staff Name", "Staff Role", "Department", "Avg Rating", "Total Ratings"]]
             for idx, row in enumerate(staff_performance):
-                badge = "⭐ Best Staff" if idx == 0 else ""
                 table_data.append([
                     str(idx + 1),
                     row.staff_name,
+                    row.staff_role or "N/A",
                     row.department or "N/A",
                     f"{round(float(row.avg_rating), 2)}/5.0",
-                    str(row.total_ratings),
-                    badge
+                    str(row.total_ratings)
                 ])
             
-            perf_table = Table(table_data, colWidths=[40, 120, 100, 80, 80, 80])
+            perf_table = Table(table_data, colWidths=[40, 110, 110, 90, 75, 75])
             perf_table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4472C4')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
                 ('GRID', (0, 0), (-1, -1), 1, colors.black),
                 ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                 ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#d1fae5')),  # Highlight best staff row
