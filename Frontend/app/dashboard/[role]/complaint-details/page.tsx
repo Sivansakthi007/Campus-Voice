@@ -529,11 +529,17 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
                       <p className="text-white font-medium">{new Date(complaint.createdAt).toLocaleDateString()}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <User className="w-5 h-5 text-gray-400" />
+                  <div className="flex items-start gap-3">
+                    <User className="w-5 h-5 text-gray-400 mt-0.5" />
                     <div>
                       <p className="text-sm text-gray-400">Submitted by</p>
                       <p className="text-white font-medium">{complaint.studentName || "Anonymous"}</p>
+                      {complaint.studentEmail && complaint.studentEmail !== "Hidden" && (
+                        <p className="text-xs text-gray-500">{complaint.studentEmail}</p>
+                      )}
+                      {(complaint as any).anonymous_label && (
+                        <p className="text-xs text-amber-400 mt-1 font-medium italic">{(complaint as any).anonymous_label}</p>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-3">

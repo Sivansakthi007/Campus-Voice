@@ -293,6 +293,7 @@ class ComplaintResponse(BaseModel):
     updated_at: str
     responses: List[Dict[str, Any]]
     timeline: List[Dict[str, Any]]
+    anonymous_label: Optional[str] = None
 
 class ComplaintUpdate(BaseModel):
     status: Optional[str] = None
@@ -367,6 +368,59 @@ def create_response(success: bool, message: str, data: Any = None, status_code: 
             "data": data
         }
     )
+
+def filter_complaint_identity(comp: Complaint, user: dict):
+    """
+    Filters student identity data in a complaint based on the requester's role.
+    Rules:
+    - If anonymous: 
+        - Admin/Principal: Show real data + add label.
+        - Owner: Show real data.
+        - Staff/Others: Hide data (Anonymous/Hidden).
+    - If not anonymous: Show real data.
+    """
+    is_owner = user["id"] == comp.student_id
+    is_privileged = user["role"] in [UserRole.ADMIN, UserRole.PRINCIPAL]
+    
+    # Base mapping for properties that are always visible
+    resp = {
+        "id": comp.id,
+        "title": comp.title,
+        "description": comp.description,
+        "status": comp.status,
+        "category": comp.category,
+        "priority": comp.priority,
+        "sentiment": comp.sentiment,
+        "foul_language_severity": comp.foul_language_severity,
+        "foul_language_detected": comp.foul_language_detected,
+        "is_anonymous": comp.is_anonymous,
+        "student_id": comp.student_id,
+        "support_count": comp.support_count,
+        "assigned_to": comp.assigned_to,
+        "assigned_to_name": comp.assigned_to_name,
+        "assigned_at": comp.assigned_at.isoformat() if comp.assigned_at else None,
+        "created_at": comp.created_at.isoformat() if comp.created_at else None,
+        "updated_at": comp.updated_at.isoformat() if comp.updated_at else None,
+        "responses": comp.responses,
+        "timeline": comp.timeline,
+        "anonymous_label": None
+    }
+
+    if comp.is_anonymous:
+        if is_privileged or is_owner:
+            resp["student_name"] = comp.student_name
+            resp["student_email"] = comp.student_email
+            if is_privileged:
+                resp["anonymous_label"] = "Anonymous to Staff – Visible to Admin/Principal Only"
+        else:
+            resp["student_name"] = "Anonymous"
+            resp["student_email"] = "Hidden"
+    else:
+        resp["student_name"] = comp.student_name
+        resp["student_email"] = comp.student_email
+        
+    return resp
+
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
@@ -887,7 +941,7 @@ async def create_complaint(complaint_data: ComplaintCreate, current_user: dict =
         foul_language_severity=analysis.foul_language_severity,
         is_anonymous=complaint_data.is_anonymous,
         student_id=current_user["id"],
-        student_name=None if complaint_data.is_anonymous else current_user["name"],
+        student_name=current_user["name"],
         student_email=current_user["email"],
         student_department=student_dept,
         support_count=0,
@@ -931,30 +985,8 @@ async def create_complaint(complaint_data: ComplaintCreate, current_user: dict =
     # Debug logging after commit
     logger.info(f"Complaint created - ID: {complaint_obj.id}, student_id saved: {complaint_obj.student_id}, assigned_to: {complaint_obj.assigned_to}")
 
-    response_data = {
-        "id": complaint_obj.id,
-        "title": complaint_obj.title,
-        "description": complaint_obj.description,
-        "status": complaint_obj.status,
-        "category": complaint_obj.category,
-        "priority": complaint_obj.priority,
-        "sentiment": complaint_obj.sentiment,
-        "foul_language_severity": complaint_obj.foul_language_severity,
-        "foul_language_detected": complaint_obj.foul_language_detected,
-        "is_anonymous": complaint_obj.is_anonymous,
-        "student_id": complaint_obj.student_id,
-        "student_name": complaint_obj.student_name,
-        "student_email": complaint_obj.student_email,
-        "support_count": complaint_obj.support_count,
-        "assigned_to": complaint_obj.assigned_to,
-        "assigned_to_name": complaint_obj.assigned_to_name,
-        "assigned_at": complaint_obj.assigned_at.isoformat() if complaint_obj.assigned_at else None,
-        "created_at": complaint_obj.created_at.isoformat() if complaint_obj.created_at else None,
-        "updated_at": complaint_obj.updated_at.isoformat() if complaint_obj.updated_at else None,
-        "responses": complaint_obj.responses,
-        "timeline": complaint_obj.timeline
-    }
-
+    # --- IDENTITY FILTERING FOR ANONYMOUS COMPLAINTS ---
+    response_data = filter_complaint_identity(complaint_obj, current_user)
     return ComplaintResponse(**response_data)
 
 @api_router.post("/complaints/transcribe")
@@ -988,31 +1020,7 @@ async def get_complaints(current_user: dict = Depends(get_current_user), session
     res = await session.execute(stmt)
     complaints = res.scalars().all()
 
-    def _to_response(c: Complaint):
-        return {
-            "id": c.id,
-            "title": c.title,
-            "description": c.description,
-            "status": c.status,
-            "category": c.category,
-            "priority": c.priority,
-            "sentiment": c.sentiment,
-            "foul_language_severity": c.foul_language_severity,
-            "foul_language_detected": c.foul_language_detected,
-            "is_anonymous": c.is_anonymous,
-            "student_id": c.student_id,
-            "student_name": c.student_name,
-            "support_count": c.support_count,
-            "assigned_to": c.assigned_to,
-            "assigned_to_name": c.assigned_to_name,
-            "assigned_at": c.assigned_at.isoformat() if c.assigned_at else None,
-            "created_at": c.created_at.isoformat() if c.created_at else None,
-            "updated_at": c.updated_at.isoformat() if c.updated_at else None,
-            "responses": c.responses,
-            "timeline": c.timeline
-        }
-
-    return create_response(True, "Complaints retrieved successfully", [_to_response(c) for c in complaints])
+    return create_response(True, "Complaints retrieved successfully", [filter_complaint_identity(c, current_user) for c in complaints])
 
 @api_router.get("/complaints/{complaint_id}", response_model=ComplaintResponse)
 async def get_complaint(complaint_id: str, current_user: dict = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
@@ -1021,29 +1029,7 @@ async def get_complaint(complaint_id: str, current_user: dict = Depends(get_curr
         raise HTTPException(status_code=404, detail="Complaint not found")
 
 
-    return ComplaintResponse(
-        id=complaint.id,
-        title=complaint.title,
-        description=complaint.description,
-        status=complaint.status,
-        category=complaint.category,
-        priority=complaint.priority,
-        sentiment=complaint.sentiment,
-        foul_language_severity=complaint.foul_language_severity,
-        foul_language_detected=complaint.foul_language_detected,
-        is_anonymous=complaint.is_anonymous,
-        student_id=complaint.student_id,
-        student_name=complaint.student_name,
-        student_email=complaint.student_email,
-        support_count=complaint.support_count,
-        assigned_to=complaint.assigned_to,
-        assigned_to_name=complaint.assigned_to_name,
-        assigned_at=complaint.assigned_at.isoformat() if complaint.assigned_at else None,
-        created_at=complaint.created_at.isoformat() if complaint.created_at else None,
-        updated_at=complaint.updated_at.isoformat() if complaint.updated_at else None,
-        responses=complaint.responses,
-        timeline=complaint.timeline
-    )
+    return ComplaintResponse(**filter_complaint_identity(complaint, current_user))
 
 @api_router.put("/complaints/{complaint_id}")
 async def update_complaint(complaint_id: str, update_data: ComplaintUpdate, current_user: dict = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
@@ -1174,26 +1160,7 @@ async def update_complaint(complaint_id: str, update_data: ComplaintUpdate, curr
 
     logger.info(f"Complaint {complaint_id} updated successfully")
 
-    data = {
-        "id": complaint_obj.id,
-        "title": complaint_obj.title,
-        "description": complaint_obj.description,
-        "status": complaint_obj.status,
-        "category": complaint_obj.category,
-        "priority": complaint_obj.priority,
-        "sentiment": complaint_obj.sentiment,
-        "foul_language_severity": complaint_obj.foul_language_severity,
-        "foul_language_detected": complaint_obj.foul_language_detected,
-        "is_anonymous": complaint_obj.is_anonymous,
-        "student_id": complaint_obj.student_id,
-        "student_name": complaint_obj.student_name,
-        "support_count": complaint_obj.support_count,
-        "created_at": complaint_obj.created_at.isoformat() if complaint_obj.created_at else None,
-        "updated_at": complaint_obj.updated_at.isoformat() if complaint_obj.updated_at else None,
-        "responses": complaint_obj.responses,
-        "timeline": complaint_obj.timeline
-    }
-    return create_response(True, "Complaint updated successfully", data)
+    return create_response(True, "Complaint updated successfully", filter_complaint_identity(complaint_obj, current_user))
 
 @api_router.get("/complaints/{complaint_id}/eligible-staff")
 async def get_eligible_staff(complaint_id: str, current_user: dict = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
@@ -1610,31 +1577,7 @@ async def get_my_complaints(current_user: dict = Depends(get_current_user), sess
     res = await session.execute(stmt)
     complaints = res.scalars().all()
     
-    def _to_response(c: Complaint):
-        # Get resolution outcome from last response or status
-        resolution_outcome = None
-        if c.status in [ComplaintStatus.RESOLVED, ComplaintStatus.REJECTED]:
-            resolution_outcome = c.status.replace("_", " ").title()
-            if c.responses and len(c.responses) > 0:
-                last_response = c.responses[-1]
-                if isinstance(last_response, dict) and "text" in last_response:
-                    resolution_outcome = last_response["text"][:100] + ("..." if len(last_response.get("text", "")) > 100 else "")
-        
-        return {
-            "id": c.id,
-            "title": c.title,
-            "description": c.description[:100] + "..." if len(c.description) > 100 else c.description,
-            "category": c.category,
-            "status": c.status,
-            "priority": c.priority,
-            "created_at": c.created_at.isoformat() if c.created_at else None,
-            "updated_at": c.updated_at.isoformat() if c.updated_at else None,
-            "assigned_at": c.assigned_at.isoformat() if c.assigned_at else None,
-            "resolution_outcome": resolution_outcome,
-            "student_name": c.student_name if not c.is_anonymous else "Anonymous"
-        }
-    
-    return create_response(True, "Complaints retrieved successfully", [_to_response(c) for c in complaints])
+    return create_response(True, "Complaints retrieved successfully", [filter_complaint_identity(c, current_user) for c in complaints])
 
 
 @api_router.get("/staff/report/export")
