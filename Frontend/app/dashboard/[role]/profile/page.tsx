@@ -31,19 +31,43 @@ export default function ProfilePage({ params }: { params: Promise<{ role: string
   })
 
   useEffect(() => {
-    const currentUser = mockStorage.getUser()
-    if (!currentUser || currentUser.role !== role) {
-      router.push("/login")
-      return
-    }
-    setUser(currentUser)
-    setFormData({
-      name: currentUser.name,
-      email: currentUser.email,
-      department: currentUser.department || "",
-    })
+    const fetchUser = async () => {
+      try {
+        // First get from localStorage for immediate display
+        const currentUser = mockStorage.getUser()
+        if (!currentUser || currentUser.role !== role) {
+          router.push("/login")
+          return
+        }
+        setUser(currentUser)
+        setFormData({
+          name: currentUser.name,
+          email: currentUser.email,
+          department: currentUser.department || "",
+        })
 
-    // Calculate stats on client side only to avoid hydration mismatch
+        // Then fetch fresh data from API to get the latest role
+        if (apiClient.isAuthenticated()) {
+          const freshUser = await apiClient.getCurrentUser()
+          if (freshUser) {
+            // Update state and localStorage
+            setUser(freshUser)
+            mockStorage.setUser(freshUser)
+            setFormData({
+              name: freshUser.name,
+              email: freshUser.email,
+              department: freshUser.department || "",
+            })
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch user profile:", error)
+      }
+    }
+
+    fetchUser()
+
+    // Calculate stats on client side
     const complaints = mockStorage.getComplaints()
     const resolvedCount = complaints.filter((c) => c.status === "resolved").length
     setUserStats({
@@ -267,10 +291,13 @@ export default function ProfilePage({ params }: { params: Promise<{ role: string
                       <label className="block text-sm font-medium text-gray-400 mb-2">Staff Role</label>
                       <div className="flex items-center gap-3 glass-card rounded-xl p-4">
                         <User className="w-5 h-5 text-gray-400" />
-                        <span className="text-white">{user?.staff_role || "Not specified"}</span>
+                        <span className="text-white">
+                          {user?.staff_role || "Role Not Assigned"}
+                        </span>
                       </div>
                     </div>
                   )}
+
 
                   {/* Department */}
                   <div>

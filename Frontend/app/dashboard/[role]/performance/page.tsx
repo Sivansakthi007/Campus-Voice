@@ -34,7 +34,7 @@ interface ComplaintRecord {
   student_name: string
 }
 
-export default function PerformancePage({ params }: { params: { role: string } }) {
+export default function PerformancePage({ params }: { params: Promise<{ role: string }> }) {
   const { role } = React.use(params) as { role: "staff" }
   const router = useRouter()
   const colors = ROLE_COLORS[role]
