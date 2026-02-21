@@ -18,6 +18,7 @@ class User(Base):
     role = Column(String(50), nullable=False)
     department = Column(String(255), nullable=True)
     student_id = Column(String(100), nullable=True)
+    staff_id = Column(String(100), nullable=True)
     staff_role = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

@@ -62,8 +62,8 @@ export default function LoginPage() {
         name: user.name,
         role: user.role,
         department: user.department,
-        studentId: user.studentId || user["student_id"] || "",
-        staffId: user.staffId || user["staff_id"] || "",
+        studentId: user.student_id || user.studentId || "",
+        staff_id: user.staff_id || user.staffId || "",
         avatar: persistedAvatar || user.avatar || "",
       });
       toast.success(`Welcome back, ${user.name}!`);

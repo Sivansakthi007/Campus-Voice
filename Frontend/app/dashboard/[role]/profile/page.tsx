@@ -174,7 +174,7 @@ export default function ProfilePage({ params }: { params: Promise<{ role: string
                   <p className={`text-sm ${colors.text} mb-4 uppercase`}>{role}</p>
                   <div className="glass-card rounded-xl p-3">
                     <p className="text-sm text-gray-400 mb-1">{user?.studentId ? "Student ID" : "Staff ID"}</p>
-                    <p className="text-white font-medium">{user?.studentId || user?.staffId || "N/A"}</p>
+                    <p className="text-white font-medium">{user?.studentId || user?.staff_id || "Not Assigned"}</p>
                   </div>
                 </div>
               </div>
@@ -324,7 +324,7 @@ export default function ProfilePage({ params }: { params: Promise<{ role: string
                     </label>
                     <div className="flex items-center gap-3 glass-card rounded-xl p-4">
                       <Hash className="w-5 h-5 text-gray-400" />
-                      <span className="text-white">{user?.studentId || user?.staffId || "N/A"}</span>
+                      <span className="text-white">{user?.studentId || user?.staff_id || "Not Assigned"}</span>
                     </div>
                   </div>
                 </div>

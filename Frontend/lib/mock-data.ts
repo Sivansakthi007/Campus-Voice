@@ -7,7 +7,7 @@ export interface User {
   role: UserRole
   department?: string
   studentId?: string
-  staffId?: string
+  staff_id?: string
   staff_role?: string
   avatar?: string
 }

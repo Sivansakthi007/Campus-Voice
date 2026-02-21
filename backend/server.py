@@ -98,6 +98,29 @@ async def startup():
             except Exception as migration_err:
                 logger.warning(f"Migration check for staff_role column: {str(migration_err)}")
             
+            # Safe migration: add staff_id column to users if it doesn't exist
+            try:
+                async with engine.begin() as conn:
+                    result = await conn.execute(text(
+                        "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
+                        "WHERE TABLE_NAME = 'users' AND COLUMN_NAME = 'staff_id'"
+                    ))
+                    column_exists = result.fetchone() is not None
+                    
+                    if not column_exists:
+                        await conn.execute(text(
+                            "ALTER TABLE users ADD COLUMN staff_id VARCHAR(100) NULL"
+                        ))
+                        # Optional: Migrate existing staff data from student_id to staff_id
+                        await conn.execute(text(
+                            "UPDATE users SET staff_id = student_id WHERE role != 'student' AND staff_id IS NULL"
+                        ))
+                        logger.info("Migration: Added 'staff_id' column to users table and migrated existing data")
+                    else:
+                        logger.info("Migration: 'staff_id' column already exists")
+            except Exception as migration_err:
+                logger.warning(f"Migration check for staff_id column: {str(migration_err)}")
+
             # Safe migration: add student_department column to complaints if it doesn't exist
             try:
                 async with engine.begin() as conn:
@@ -447,7 +470,6 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         if user is None:
             raise HTTPException(status_code=401, detail="User not found")
         # Compute student_id/staff_id based on role
-        stored_id = user.student_id
         is_student = user.role == UserRole.STUDENT
         return {
             "id": user.id,
@@ -455,8 +477,8 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             "name": user.name,
             "role": user.role,
             "department": user.department,
-            "student_id": stored_id if is_student else None,
-            "staff_id": stored_id if not is_student else None,
+            "student_id": user.student_id if is_student else None,
+            "staff_id": user.staff_id if not is_student else None,
             "staff_role": user.staff_role,
             "created_at": user.created_at.isoformat() if user.created_at else None
         }
@@ -614,7 +636,8 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_se
             name=user_data.name,
             role=user_data.role,
             department=user_data.department,
-            student_id=stored_id,  # Polymorphic: stores student_id or staff_id
+            student_id=user_data.student_id if is_student else None,
+            staff_id=user_data.staff_id if not is_student else None,
             staff_role=user_data.staff_role if user_data.role != UserRole.STUDENT else None
         )
         session.add(user_obj)
@@ -629,7 +652,6 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_se
     access_token = create_access_token({"sub": user_obj.id})
 
     # Return computed student_id/staff_id based on role
-    stored_id = user_obj.student_id
     is_student_role = user_obj.role == UserRole.STUDENT
     user_response = UserResponse(
         id=user_obj.id,
@@ -637,8 +659,8 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_se
         name=user_obj.name,
         role=user_obj.role,
         department=user_obj.department,
-        student_id=stored_id if is_student_role else None,
-        staff_id=stored_id if not is_student_role else None,
+        student_id=user_obj.student_id if is_student_role else None,
+        staff_id=user_obj.staff_id if not is_student_role else None,
         staff_role=user_obj.staff_role,
         created_at=user_obj.created_at.isoformat() if user_obj.created_at else None
     )
@@ -661,7 +683,6 @@ async def login(credentials: UserLogin, session: AsyncSession = Depends(get_sess
     access_token = create_access_token({"sub": user_obj.id})
 
     # Return computed student_id/staff_id based on role
-    stored_id = user_obj.student_id
     is_student_role = user_obj.role == UserRole.STUDENT
     user_response = UserResponse(
         id=user_obj.id,
@@ -669,8 +690,8 @@ async def login(credentials: UserLogin, session: AsyncSession = Depends(get_sess
         name=user_obj.name,
         role=user_obj.role,
         department=user_obj.department,
-        student_id=stored_id if is_student_role else None,
-        staff_id=stored_id if not is_student_role else None,
+        student_id=user_obj.student_id if is_student_role else None,
+        staff_id=user_obj.staff_id if not is_student_role else None,
         staff_role=user_obj.staff_role,
         created_at=user_obj.created_at.isoformat() if user_obj.created_at else None
     )
@@ -705,7 +726,6 @@ async def list_users(
     users = res.scalars().all()
 
     def _to_resp(u: User):
-        stored_id = u.student_id
         is_student = u.role == UserRole.STUDENT
         return {
             "id": u.id,
@@ -713,8 +733,8 @@ async def list_users(
             "name": u.name,
             "role": u.role,
             "department": u.department,
-            "student_id": stored_id if is_student else None,
-            "staff_id": stored_id if not is_student else None,
+            "student_id": u.student_id if is_student else None,
+            "staff_id": u.staff_id if not is_student else None,
             "staff_role": u.staff_role,
             "created_at": u.created_at.isoformat() if u.created_at else None,
         }
