@@ -77,164 +77,182 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[rgb(15,15,20)] via-[rgb(24,24,32)] to-[rgb(15,15,20)] py-12 px-4">
-      <div className="container mx-auto max-w-6xl">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-between mb-8"
-        >
-          <button
-            onClick={() => (selectedRole ? setSelectedRole(null) : router.push("/welcome"))}
-            className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+    <div
+      className="relative min-h-screen w-full"
+      style={{
+        backgroundImage: "url('/campus-voice-bg.jpg')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+        backgroundAttachment: "fixed",
+      }}
+    >
+      {/* Dark Overlay */}
+      <div
+        className="absolute inset-0"
+        style={{ backgroundColor: "rgba(0, 0, 0, 0.6)" }}
+      />
+
+      {/* Content */}
+      <div className="relative z-10 min-h-screen py-12 px-4">
+        <div className="container mx-auto max-w-6xl">
+          {/* Header */}
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center justify-between mb-8"
           >
-            <ArrowLeft className="w-5 h-5" />
-            Back
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center">
-              <GraduationCap className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xl font-bold bg-gradient-to-r from-blue-400 to-violet-400 bg-clip-text text-transparent">
-              CampusVoice
-            </span>
-          </div>
-        </motion.div>
-
-        {/* Login Form */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-          <h1 className="text-4xl font-bold text-white mb-2 text-center">Welcome Back</h1>
-          <p className="text-gray-400 text-center mb-8">Sign in to continue</p>
-
-          {/* Role Selection */}
-          {!selectedRole && (
-            <div className="max-w-4xl mx-auto">
-              <p className="text-center text-gray-300 mb-6 text-lg">Select your role to continue</p>
-              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                {ROLE_OPTIONS.map((role, index) => {
-                  const Icon = role.icon
-                  const colors = ROLE_COLORS[role.value]
-                  return (
-                    <motion.button
-                      key={role.value}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: 0.1 + index * 0.05 }}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => setSelectedRole(role.value)}
-                      className={`glass-card p-6 rounded-xl text-center group hover:border-opacity-50 transition-all ${colors.border}`}
-                    >
-                      <div
-                        className={`w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br ${colors.gradient} flex items-center justify-center shadow-lg`}
-                      >
-                        <Icon className="w-8 h-8 text-white" />
-                      </div>
-                      <h3 className="text-lg font-semibold text-white">{role.label}</h3>
-                    </motion.button>
-                  )
-                })}
+            <button
+              onClick={() => (selectedRole ? setSelectedRole(null) : router.push("/welcome"))}
+              className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              Back
+            </button>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center">
+                <GraduationCap className="w-5 h-5 text-white" />
               </div>
+              <span className="text-xl font-bold bg-gradient-to-r from-blue-400 to-violet-400 bg-clip-text text-transparent">
+                CampusVoice
+              </span>
             </div>
-          )}
+          </motion.div>
 
           {/* Login Form */}
-          {selectedRole && (
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-md mx-auto">
-              <div className="glass-card rounded-2xl p-8 shadow-2xl">
-                {/* Selected Role Badge */}
-                <div className="flex items-center justify-center mb-8">
-                  {(() => {
-                    const role = ROLE_OPTIONS.find((r) => r.value === selectedRole)
-                    const Icon = role?.icon
-                    const colors = ROLE_COLORS[selectedRole]
-                    return (
-                      <div className="flex flex-col items-center">
-                        <div
-                          className={`w-20 h-20 rounded-2xl bg-gradient-to-br ${colors.gradient} flex items-center justify-center shadow-lg mb-3`}
-                        >
-                          {Icon && <Icon className="w-10 h-10 text-white" />}
-                        </div>
-                        <p className="text-sm text-gray-400">Signing in as</p>
-                        <p className="text-xl font-semibold text-white">{role?.label}</p>
-                      </div>
-                    )
-                  })()}
-                </div>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+            <h1 className="text-4xl font-bold text-white mb-2 text-center">Welcome Back</h1>
+            <p className="text-gray-400 text-center mb-8">Sign in to continue</p>
 
-                <form onSubmit={handleLogin} className="space-y-4">
-                  {/* Email */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Email Address</label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                      <input
-                        type="email"
-                        required
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                        placeholder="your.email@example.com"
-                      />
-                    </div>
+            {/* Role Selection */}
+            {!selectedRole && (
+              <div className="max-w-4xl mx-auto">
+                <p className="text-center text-gray-300 mb-6 text-lg">Select your role to continue</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                  {ROLE_OPTIONS.map((role, index) => {
+                    const Icon = role.icon
+                    const colors = ROLE_COLORS[role.value]
+                    return (
+                      <motion.button
+                        key={role.value}
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 0.1 + index * 0.05 }}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => setSelectedRole(role.value)}
+                        className={`glass-card p-6 rounded-xl text-center group hover:border-opacity-50 transition-all ${colors.border}`}
+                      >
+                        <div
+                          className={`w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br ${colors.gradient} flex items-center justify-center shadow-lg`}
+                        >
+                          <Icon className="w-8 h-8 text-white" />
+                        </div>
+                        <h3 className="text-lg font-semibold text-white">{role.label}</h3>
+                      </motion.button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Login Form */}
+            {selectedRole && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-md mx-auto">
+                <div className="glass-card rounded-2xl p-8 shadow-2xl">
+                  {/* Selected Role Badge */}
+                  <div className="flex items-center justify-center mb-8">
+                    {(() => {
+                      const role = ROLE_OPTIONS.find((r) => r.value === selectedRole)
+                      const Icon = role?.icon
+                      const colors = ROLE_COLORS[selectedRole]
+                      return (
+                        <div className="flex flex-col items-center">
+                          <div
+                            className={`w-20 h-20 rounded-2xl bg-gradient-to-br ${colors.gradient} flex items-center justify-center shadow-lg mb-3`}
+                          >
+                            {Icon && <Icon className="w-10 h-10 text-white" />}
+                          </div>
+                          <p className="text-sm text-gray-400">Signing in as</p>
+                          <p className="text-xl font-semibold text-white">{role?.label}</p>
+                        </div>
+                      )
+                    })()}
                   </div>
 
-                  {/* Password */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Password</label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                      <input
-                        type={showPassword ? "text" : "password"}
-                        required
-                        value={formData.password}
-                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                        className="w-full pl-11 pr-12 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                        placeholder="Enter your password"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
-                      >
-                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  <form onSubmit={handleLogin} className="space-y-4">
+                    {/* Email */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">Email Address</label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                        <input
+                          type="email"
+                          required
+                          value={formData.email}
+                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                          className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder="your.email@example.com"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Password */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">Password</label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          required
+                          value={formData.password}
+                          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                          className="w-full pl-11 pr-12 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                          placeholder="Enter your password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                        >
+                          {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Forgot Password */}
+                    <div className="text-right">
+                      <button type="button" className="text-sm text-blue-400 hover:text-blue-300 transition-colors">
+                        Forgot password?
                       </button>
                     </div>
-                  </div>
 
-                  {/* Forgot Password */}
-                  <div className="text-right">
-                    <button type="button" className="text-sm text-blue-400 hover:text-blue-300 transition-colors">
-                      Forgot password?
+                    {/* Submit Button */}
+                    <motion.button
+                      type="submit"
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className={`w-full py-4 bg-gradient-to-r ${ROLE_COLORS[selectedRole].gradient} rounded-xl font-semibold text-white shadow-lg mt-6`}
+                    >
+                      Sign In
+                    </motion.button>
+                  </form>
+
+                  {/* Register Link */}
+                  <p className="text-center text-sm text-gray-400 mt-6">
+                    {"Don't have an account? "}
+                    <button
+                      onClick={() => router.push("/register")}
+                      className="text-blue-400 hover:text-blue-300 font-medium transition-colors"
+                    >
+                      Create one
                     </button>
-                  </div>
-
-                  {/* Submit Button */}
-                  <motion.button
-                    type="submit"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className={`w-full py-4 bg-gradient-to-r ${ROLE_COLORS[selectedRole].gradient} rounded-xl font-semibold text-white shadow-lg mt-6`}
-                  >
-                    Sign In
-                  </motion.button>
-                </form>
-
-                {/* Register Link */}
-                <p className="text-center text-sm text-gray-400 mt-6">
-                  {"Don't have an account? "}
-                  <button
-                    onClick={() => router.push("/register")}
-                    className="text-blue-400 hover:text-blue-300 font-medium transition-colors"
-                  >
-                    Create one
-                  </button>
-                </p>
-              </div>
-            </motion.div>
-          )}
-        </motion.div>
+                  </p>
+                </div>
+              </motion.div>
+            )}
+          </motion.div>
+        </div>
       </div>
     </div>
   )
