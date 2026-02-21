@@ -50,13 +50,19 @@ export default function ProfilePage({ params }: { params: Promise<{ role: string
         if (apiClient.isAuthenticated()) {
           const freshUser = await apiClient.getCurrentUser()
           if (freshUser) {
-            // Update state and localStorage
-            setUser(freshUser)
-            mockStorage.setUser(freshUser)
+            // Map snake_case to camelCase for studentId (API returns student_id)
+            const mappedUser = {
+              ...freshUser,
+              studentId: (freshUser as any).student_id || freshUser.studentId || "",
+              staff_id: (freshUser as any).staff_id || freshUser.staff_id || "",
+              staff_role: (freshUser as any).staff_role || freshUser.staff_role || "",
+            }
+            setUser(mappedUser)
+            mockStorage.setUser(mappedUser)
             setFormData({
-              name: freshUser.name,
-              email: freshUser.email,
-              department: freshUser.department || "",
+              name: mappedUser.name,
+              email: mappedUser.email,
+              department: mappedUser.department || "",
             })
           }
         }
@@ -173,8 +179,12 @@ export default function ProfilePage({ params }: { params: Promise<{ role: string
                   <h2 className="text-xl font-bold text-white mb-1">{user?.name}</h2>
                   <p className={`text-sm ${colors.text} mb-4 uppercase`}>{role}</p>
                   <div className="glass-card rounded-xl p-3">
-                    <p className="text-sm text-gray-400 mb-1">{user?.studentId ? "Student ID" : "Staff ID"}</p>
-                    <p className="text-white font-medium">{user?.studentId || user?.staff_id || "Not Assigned"}</p>
+                    <p className="text-sm text-gray-400 mb-1">{role === "student" ? "Student ID" : "Staff ID"}</p>
+                    <p className="text-white font-bold text-lg">
+                      {role === "student"
+                        ? (user?.studentId || "Student ID Not Available")
+                        : (user?.staff_id || "Staff ID Not Available")}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -320,11 +330,15 @@ export default function ProfilePage({ params }: { params: Promise<{ role: string
                   {/* ID */}
                   <div>
                     <label className="block text-sm font-medium text-gray-400 mb-2">
-                      {user?.studentId ? "Student ID" : "Staff ID"}
+                      {role === "student" ? "Student ID" : "Staff ID"}
                     </label>
                     <div className="flex items-center gap-3 glass-card rounded-xl p-4">
                       <Hash className="w-5 h-5 text-gray-400" />
-                      <span className="text-white">{user?.studentId || user?.staff_id || "Not Assigned"}</span>
+                      <span className="text-white font-bold">
+                        {role === "student"
+                          ? (user?.studentId || "Student ID Not Available")
+                          : (user?.staff_id || "Staff ID Not Available")}
+                      </span>
                     </div>
                   </div>
                 </div>
