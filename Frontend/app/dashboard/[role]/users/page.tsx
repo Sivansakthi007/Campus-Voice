@@ -307,7 +307,7 @@ export default function UserManagementPage({ params }: { params: Promise<{ role:
                         </span>
                       </td>
                       <td className="p-4 text-gray-300">{user.staff_role || "N/A"}</td>
-                      <td className="p-4 text-gray-300">{user.department}</td>
+                      <td className="p-4 text-gray-300">{user.role === "principal" || user.role === "admin" ? "—" : user.department}</td>
                       <td className="p-4">
                         <span
                           className="px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-400"
@@ -374,7 +374,12 @@ export default function UserManagementPage({ params }: { params: Promise<{ role:
               />
               <select
                 value={formRole}
-                onChange={(e) => setFormRole(e.target.value)}
+                onChange={(e) => {
+                  setFormRole(e.target.value)
+                  if (e.target.value === "principal" || e.target.value === "admin") {
+                    setFormDepartment("")
+                  }
+                }}
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-white/30"
               >
                 <option value="student">Student</option>
@@ -396,13 +401,15 @@ export default function UserManagementPage({ params }: { params: Promise<{ role:
                   ))}
                 </select>
               )}
-              <input
-                type="text"
-                placeholder="Department (optional)"
-                value={formDepartment}
-                onChange={(e) => setFormDepartment(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-white/30"
-              />
+              {formRole !== "principal" && formRole !== "admin" && (
+                <input
+                  type="text"
+                  placeholder="Department (optional)"
+                  value={formDepartment}
+                  onChange={(e) => setFormDepartment(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-white/30"
+                />
+              )}
               <button
                 onClick={handleAddUser}
                 disabled={isSubmitting || !formName || !formEmail || !formPassword}

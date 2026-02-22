@@ -42,6 +42,18 @@ JWT_SECRET = os.environ.get('JWT_SECRET', 'your-secret-key-change-in-production'
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 1 week
 
+# Role-Based Registration Passwords (hashed at startup for security)
+# These passwords are required to register as Staff, HOD, Principal, or Admin.
+# Students do not need a registration password.
+_REG_PWD_PLAIN = {
+    "staff": "9512",
+    "hod": "05112005",
+    "principal": "12112005",
+    "admin": "11042005",
+}
+REGISTRATION_PASSWORD_HASHES = {role: pwd_context.hash(pw) for role, pw in _REG_PWD_PLAIN.items()}
+del _REG_PWD_PLAIN  # Remove plaintext from memory immediately
+
 # AI Configuration
 LLM_KEY = os.environ.get('LLM_KEY')
 
@@ -247,6 +259,10 @@ class FoulLanguageSeverity(str):
     SEVERE = "Severe"
 
 # User Models
+class RegistrationPasswordVerify(BaseModel):
+    role: str
+    registration_password: str
+
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
@@ -256,6 +272,7 @@ class UserCreate(BaseModel):
     student_id: Optional[str] = None
     staff_id: Optional[str] = None
     staff_role: Optional[str] = None
+    registration_password: Optional[str] = None
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -476,7 +493,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             "email": user.email,
             "name": user.name,
             "role": user.role,
-            "department": user.department,
+            "department": None if user.role in (UserRole.PRINCIPAL, UserRole.ADMIN) else user.department,
             "student_id": user.student_id if is_student else None,
             "staff_id": user.staff_id if not is_student else None,
             "staff_role": user.staff_role,
@@ -603,6 +620,24 @@ async def check_duplicate_complaint(title: str, description: str, user_id: str, 
     return None
 
 # ===== AUTH ENDPOINTS =====
+
+@api_router.post("/auth/verify-registration-password")
+async def verify_registration_password(data: RegistrationPasswordVerify):
+    """Verify registration password for a role before showing the registration form."""
+    role = data.role.lower().strip()
+    # Students don't need a registration password
+    if role == UserRole.STUDENT:
+        return create_response(True, "No password required for student registration")
+    
+    expected_hash = REGISTRATION_PASSWORD_HASHES.get(role)
+    if not expected_hash:
+        return create_response(False, "Invalid role specified", status_code=400)
+    
+    if pwd_context.verify(data.registration_password, expected_hash):
+        return create_response(True, "Registration password verified")
+    else:
+        return create_response(False, "Invalid Registration Password", status_code=403)
+
 @api_router.post("/auth/register")
 async def register(user_data: UserCreate, session: AsyncSession = Depends(get_session)):
     # Check if user exists
@@ -611,6 +646,16 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_se
     existing_user = res.scalars().first()
     if existing_user:
         return create_response(False, "Email already registered", status_code=400)
+
+    # Validate registration password for non-student roles
+    if user_data.role != UserRole.STUDENT:
+        expected_hash = REGISTRATION_PASSWORD_HASHES.get(user_data.role)
+        if not expected_hash:
+            return create_response(False, "Invalid role specified", status_code=400)
+        if not user_data.registration_password:
+            return create_response(False, "Registration password is required", status_code=403)
+        if not pwd_context.verify(user_data.registration_password, expected_hash):
+            return create_response(False, "Invalid Registration Password", status_code=403)
 
     # Validate staff_role for staff registrations
     VALID_STAFF_ROLES = [
@@ -629,13 +674,15 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_se
     # Create user - store ID in student_id column based on role
     is_student = user_data.role == UserRole.STUDENT
     stored_id = user_data.student_id if is_student else user_data.staff_id
+    # Principal and Admin roles should not have a department
+    effective_department = None if user_data.role in (UserRole.PRINCIPAL, UserRole.ADMIN) else user_data.department
     try:
         user_obj = User(
             email=user_data.email,
             password=hash_password(user_data.password),
             name=user_data.name,
             role=user_data.role,
-            department=user_data.department,
+            department=effective_department,
             student_id=user_data.student_id if is_student else None,
             staff_id=user_data.staff_id if not is_student else None,
             staff_role=user_data.staff_role if user_data.role != UserRole.STUDENT else None
@@ -658,7 +705,7 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_se
         email=user_obj.email,
         name=user_obj.name,
         role=user_obj.role,
-        department=user_obj.department,
+        department=None if user_obj.role in (UserRole.PRINCIPAL, UserRole.ADMIN) else user_obj.department,
         student_id=user_obj.student_id if is_student_role else None,
         staff_id=user_obj.staff_id if not is_student_role else None,
         staff_role=user_obj.staff_role,
@@ -689,7 +736,7 @@ async def login(credentials: UserLogin, session: AsyncSession = Depends(get_sess
         email=user_obj.email,
         name=user_obj.name,
         role=user_obj.role,
-        department=user_obj.department,
+        department=None if user_obj.role in (UserRole.PRINCIPAL, UserRole.ADMIN) else user_obj.department,
         student_id=user_obj.student_id if is_student_role else None,
         staff_id=user_obj.staff_id if not is_student_role else None,
         staff_role=user_obj.staff_role,
@@ -732,7 +779,7 @@ async def list_users(
             "email": u.email,
             "name": u.name,
             "role": u.role,
-            "department": u.department,
+            "department": None if u.role in (UserRole.PRINCIPAL, UserRole.ADMIN) else u.department,
             "student_id": u.student_id if is_student else None,
             "staff_id": u.staff_id if not is_student else None,
             "staff_role": u.staff_role,

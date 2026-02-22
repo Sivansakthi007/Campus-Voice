@@ -32,6 +32,7 @@ interface RegisterRequest {
   department?: string
   student_id?: string
   staff_role?: string
+  registration_password?: string
 }
 
 interface TokenResponse {

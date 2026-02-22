@@ -309,23 +309,25 @@ export default function ProfilePage({ params }: { params: Promise<{ role: string
                   )}
 
 
-                  {/* Department */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">Department</label>
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={formData.department}
-                        onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                        className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    ) : (
-                      <div className="flex items-center gap-3 glass-card rounded-xl p-4">
-                        <Building className="w-5 h-5 text-gray-400" />
-                        <span className="text-white">{user?.department || "Not specified"}</span>
-                      </div>
-                    )}
-                  </div>
+                  {/* Department — hidden for Principal and Admin */}
+                  {role !== "principal" && role !== "admin" && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-400 mb-2">Department</label>
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={formData.department}
+                          onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                          className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      ) : (
+                        <div className="flex items-center gap-3 glass-card rounded-xl p-4">
+                          <Building className="w-5 h-5 text-gray-400" />
+                          <span className="text-white">{user?.department || "Not specified"}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* ID */}
                   <div>
