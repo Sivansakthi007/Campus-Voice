@@ -1231,55 +1231,8 @@ async def get_eligible_staff(complaint_id: str, current_user: dict = Depends(get
         "excluded_names": excluded_names
     }
 
-@api_router.delete("/complaints/{complaint_id}")
-async def delete_complaint(complaint_id: str, confirm: bool = False, current_user: dict = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
-    """
-    Delete a complaint (Complete action).
-    
-    Rules:
-    - Admin can delete any complaint
-    - Staff can only delete complaints assigned to them AND with status 'resolved'
-    - Requires confirm=true to prevent accidental deletion
-    """
-    logger.info(f"DELETE /complaints/{complaint_id} - User: {current_user['id']}, Role: {current_user['role']}, Confirm: {confirm}")
 
-    complaint_obj = await session.get(Complaint, complaint_id)
-    if not complaint_obj:
-        logger.warning(f"Complaint {complaint_id} not found")
-        return create_response(False, "Complaint not found", status_code=404)
 
-    # Check confirmation parameter
-    if not confirm:
-        return create_response(False, "Confirmation required. Pass confirm=true to delete.", status_code=400)
-
-    user_role = current_user["role"]
-    user_id = current_user["id"]
-
-    # Admin can delete any complaint
-    if user_role == UserRole.ADMIN:
-        await session.delete(complaint_obj)
-        await session.commit()
-        logger.info(f"Complaint {complaint_id} deleted by Admin {user_id}")
-        return create_response(True, "Complaint deleted successfully")
-
-    # Staff can only delete complaints assigned to them with status 'resolved'
-    if user_role == UserRole.STAFF:
-        if complaint_obj.assigned_to != user_id:
-            logger.warning(f"Staff {user_id} tried to delete complaint {complaint_id} not assigned to them")
-            return create_response(False, "You can only complete complaints assigned to you", status_code=403)
-        
-        if complaint_obj.status != ComplaintStatus.RESOLVED:
-            logger.warning(f"Staff {user_id} tried to delete complaint {complaint_id} with status {complaint_obj.status}")
-            return create_response(False, "Complaint must be resolved before completing", status_code=400)
-        
-        await session.delete(complaint_obj)
-        await session.commit()
-        logger.info(f"Complaint {complaint_id} completed and deleted by Staff {user_id}")
-        return create_response(True, "Complaint completed successfully")
-
-    # Other roles cannot delete
-    logger.warning(f"Permission denied for user {current_user['id']} (role: {user_role}) to delete complaint {complaint_id}")
-    return create_response(False, "Permission denied", status_code=403)
 
 @api_router.post("/complaints/{complaint_id}/support")
 async def support_complaint(complaint_id: str, current_user: dict = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
@@ -2875,6 +2828,240 @@ async def get_hods_for_rating(
         "semester": semester,
         "year": year
     })
+
+
+# ===== STAFF GRIEVANCE ENDPOINTS (Principal only) =====
+
+@api_router.get("/staff-grievance/overview")
+async def get_staff_grievance_overview(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get staff grievance overview: performance, ranking, category analytics."""
+    if current_user["role"] != UserRole.PRINCIPAL:
+        raise HTTPException(status_code=403, detail="Only Principal can access staff grievance data")
+
+    # Get all staff users
+    staff_result = await session.execute(select(User).where(User.role == UserRole.STAFF))
+    staff_users = staff_result.scalars().all()
+
+    # Get all complaints that are assigned to someone
+    all_complaints_result = await session.execute(select(Complaint).where(Complaint.assigned_to.isnot(None)))
+    all_complaints = all_complaints_result.scalars().all()
+
+    staff_performance = []
+    for staff in staff_users:
+        staff_complaints = [c for c in all_complaints if c.assigned_to == staff.id]
+        total_assigned = len(staff_complaints)
+        resolved = len([c for c in staff_complaints if c.status == ComplaintStatus.RESOLVED])
+        in_process = total_assigned - resolved
+
+        # Category-wise resolved breakdown
+        category_breakdown = {}
+        for c in staff_complaints:
+            if c.status == ComplaintStatus.RESOLVED and c.category:
+                category_breakdown[c.category] = category_breakdown.get(c.category, 0) + 1
+
+        staff_performance.append({
+            "staff_id": staff.id,
+            "staff_name": staff.name,
+            "staff_role": staff.staff_role,
+            "total_assigned": total_assigned,
+            "resolved": resolved,
+            "in_process": in_process,
+            "resolution_rate": round((resolved / total_assigned * 100) if total_assigned > 0 else 0, 2),
+            "category_breakdown": category_breakdown,
+            "is_top_performer": False,
+        })
+
+    # Sort by resolved (descending)
+    staff_performance.sort(key=lambda x: x["resolved"], reverse=True)
+    if staff_performance and staff_performance[0]["resolved"] > 0:
+        staff_performance[0]["is_top_performer"] = True
+
+    # Category analytics (global)
+    category_analytics = {}
+    for c in all_complaints:
+        cat = c.category or "Uncategorized"
+        if cat not in category_analytics:
+            category_analytics[cat] = {"total": 0, "resolved": 0}
+        category_analytics[cat]["total"] += 1
+        if c.status == ComplaintStatus.RESOLVED:
+            category_analytics[cat]["resolved"] += 1
+
+    return create_response(True, "Staff grievance overview retrieved", {
+        "staff_performance": staff_performance,
+        "category_analytics": category_analytics,
+    })
+
+
+@api_router.get("/staff-grievance/report/pdf")
+async def download_staff_grievance_pdf(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Download staff grievance report as PDF (Principal only)."""
+    if current_user["role"] != UserRole.PRINCIPAL:
+        raise HTTPException(status_code=403, detail="Only Principal can download this report")
+
+    try:
+        import io
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.lib import colors as rl_colors
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from fastapi.responses import Response
+
+        # Fetch data (same as overview)
+        staff_result = await session.execute(select(User).where(User.role == UserRole.STAFF))
+        staff_users = staff_result.scalars().all()
+        all_complaints_result = await session.execute(select(Complaint).where(Complaint.assigned_to.isnot(None)))
+        all_complaints = all_complaints_result.scalars().all()
+
+        staff_data = []
+        for staff in staff_users:
+            sc = [c for c in all_complaints if c.assigned_to == staff.id]
+            total = len(sc)
+            resolved = len([c for c in sc if c.status == ComplaintStatus.RESOLVED])
+            in_proc = total - resolved
+            cat_bd = {}
+            for c in sc:
+                if c.status == ComplaintStatus.RESOLVED and c.category:
+                    cat_bd[c.category] = cat_bd.get(c.category, 0) + 1
+            staff_data.append({
+                "name": staff.name, "role": staff.staff_role or "N/A",
+                "total": total, "resolved": resolved, "in_process": in_proc,
+                "category_breakdown": cat_bd,
+            })
+        staff_data.sort(key=lambda x: x["resolved"], reverse=True)
+
+        # Category analytics
+        cat_analytics = {}
+        for c in all_complaints:
+            cat = c.category or "Uncategorized"
+            if cat not in cat_analytics:
+                cat_analytics[cat] = {"total": 0, "resolved": 0}
+            cat_analytics[cat]["total"] += 1
+            if c.status == ComplaintStatus.RESOLVED:
+                cat_analytics[cat]["resolved"] += 1
+
+        # Build PDF
+        output = io.BytesIO()
+        doc = SimpleDocTemplate(output, pagesize=A4, topMargin=0.5*inch, bottomMargin=0.5*inch)
+        styles = getSampleStyleSheet()
+        elements = []
+
+        title_style = ParagraphStyle('GTitle', parent=styles['Title'], fontSize=20,
+                                      textColor=rl_colors.HexColor('#1a365d'))
+        elements.append(Paragraph("Staff Grievance Report", title_style))
+        elements.append(Spacer(1, 10))
+        elements.append(Paragraph(f"<b>Generated:</b> {datetime.now().strftime('%B %d, %Y at %H:%M')}", styles['Normal']))
+        elements.append(Paragraph(f"<b>Generated by:</b> {current_user['name']} (PRINCIPAL)", styles['Normal']))
+        elements.append(Spacer(1, 20))
+
+        # 1. Staff Performance Summary
+        elements.append(Paragraph("<b>Staff Performance Summary</b>", styles['Heading2']))
+        elements.append(Spacer(1, 8))
+        perf_tbl = [["Rank", "Staff Name", "Role", "Assigned", "Resolved", "In Process"]]
+        for i, s in enumerate(staff_data):
+            badge = " (Top Performer)" if i == 0 and s["resolved"] > 0 else ""
+            perf_tbl.append([str(i+1), f"{s['name']}{badge}", s["role"],
+                             str(s["total"]), str(s["resolved"]), str(s["in_process"])])
+        t = Table(perf_tbl, colWidths=[40, 130, 110, 60, 60, 70])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), rl_colors.HexColor('#4472C4')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), rl_colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 1, rl_colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('BACKGROUND', (0, 1), (-1, 1), rl_colors.HexColor('#fef3c7')),
+        ]))
+        elements.append(t)
+        elements.append(Spacer(1, 20))
+
+        # 2. Category-wise Resolved per Staff
+        elements.append(Paragraph("<b>Category-wise Resolved Complaints per Staff</b>", styles['Heading2']))
+        elements.append(Spacer(1, 8))
+        all_cats = sorted(set(c.category for c in all_complaints if c.category))
+        if all_cats:
+            cat_header = ["Staff Name"] + all_cats
+            cat_rows = [cat_header]
+            for s in staff_data:
+                row = [s["name"]] + [str(s["category_breakdown"].get(cat, 0)) for cat in all_cats]
+                cat_rows.append(row)
+            col_w = [120] + [max(50, int(350 / len(all_cats)))] * len(all_cats)
+            ct = Table(cat_rows, colWidths=col_w)
+            ct.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), rl_colors.HexColor('#2d6a4f')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), rl_colors.white),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 7),
+                ('GRID', (0, 0), (-1, -1), 0.5, rl_colors.grey),
+                ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+            ]))
+            elements.append(ct)
+        elements.append(Spacer(1, 20))
+
+        # 3. Category Analytics
+        elements.append(Paragraph("<b>Category Analytics</b>", styles['Heading2']))
+        elements.append(Spacer(1, 8))
+        ca_rows = [["Category", "Total Complaints", "Resolved"]]
+        for cat in sorted(cat_analytics.keys()):
+            ca_rows.append([cat, str(cat_analytics[cat]["total"]), str(cat_analytics[cat]["resolved"])])
+        ca_t = Table(ca_rows, colWidths=[180, 120, 120])
+        ca_t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), rl_colors.HexColor('#6c5ce7')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), rl_colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('GRID', (0, 0), (-1, -1), 0.5, rl_colors.grey),
+            ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+        ]))
+        elements.append(ca_t)
+
+        elements.append(Spacer(1, 30))
+        elements.append(Paragraph("--- End of Report ---", styles['Normal']))
+
+        doc.build(elements)
+        output.seek(0)
+
+        return Response(
+            content=output.getvalue(),
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=staff_grievance_report.pdf"}
+        )
+
+    except ImportError:
+        return create_response(False, "PDF export not available. Please install reportlab.", status_code=500)
+
+
+@api_router.delete("/staff-grievance/resolved")
+async def delete_resolved_complaints(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Delete all resolved complaints (Principal only)."""
+    if current_user["role"] != UserRole.PRINCIPAL:
+        raise HTTPException(status_code=403, detail="Only Principal can delete resolved complaints")
+
+    # Count first
+    count_result = await session.execute(
+        select(func.count()).where(Complaint.status == ComplaintStatus.RESOLVED)
+    )
+    count = count_result.scalar() or 0
+
+    if count == 0:
+        return create_response(True, "No resolved complaints to delete", {"deleted_count": 0})
+
+    # Delete
+    await session.execute(
+        Complaint.__table__.delete().where(Complaint.status == ComplaintStatus.RESOLVED)
+    )
+    await session.commit()
+
+    return create_response(True, f"Successfully deleted {count} resolved complaints", {"deleted_count": count})
 
 
 # Include router

@@ -14,7 +14,7 @@ import {
   XCircle,
   UserPlus,
   MessageSquare,
-  Trash2,
+
   Loader2,
 } from "lucide-react"
 import { Sidebar } from "@/components/layout/sidebar"
@@ -39,8 +39,7 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [showRemarkModal, setShowRemarkModal] = useState(false)
   const [showAssignModal, setShowAssignModal] = useState(false)
-  const [showCompleteModal, setShowCompleteModal] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
+
   const [selectedStatus, setSelectedStatus] = useState<string>("")
   const [remark, setRemark] = useState("")
   const [selectedStaff, setSelectedStaff] = useState<string>("")
@@ -212,22 +211,7 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
     }
   }
 
-  // Handle Complete (Delete) complaint
-  const handleComplete = async () => {
-    if (!complaint) return
 
-    setIsDeleting(true)
-    try {
-      await apiClient.deleteComplaint(complaint.id, true)
-      toast.success("Complaint completed successfully!")
-      router.push(`/dashboard/${role}/complaints`)
-    } catch (error: any) {
-      console.error("Failed to complete complaint:", error)
-      toast.error(error?.message || "Failed to complete complaint")
-      setIsDeleting(false)
-      setShowCompleteModal(false)
-    }
-  }
 
   useEffect(() => {
     if (!showAssignModal || !complaint) return
@@ -279,11 +263,7 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
   const isHodCategory = complaint ? HOD_REASSIGN_CATEGORIES.includes(complaint.category) : false
   const canReassign = isHodCategory && role === USER_ROLES.HOD && !!complaint?.assignedTo
 
-  // Complete button: Staff can complete if assigned to them AND status is resolved
-  // Admin can complete any resolved complaint
-  const canComplete =
-    (role === USER_ROLES.STAFF && complaint.assignedTo === currentUser?.id && complaint.status === COMPLAINT_STATUS.RESOLVED) ||
-    (role === USER_ROLES.ADMIN && complaint.status === COMPLAINT_STATUS.RESOLVED)
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[rgb(15,15,20)] via-[rgb(24,24,32)] to-[rgb(15,15,20)] flex">
@@ -374,16 +354,7 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
               </>
             )}
 
-            {/* Complete Button - Shows only for Staff (assigned) or Admin when resolved */}
-            {canComplete && (
-              <button
-                onClick={() => setShowCompleteModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-green-500 text-white rounded-xl hover:shadow-lg hover:scale-105 transition-all animate-pulse"
-              >
-                <Trash2 className="w-4 h-4" />
-                Complete & Archive
-              </button>
-            )}
+
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -702,58 +673,7 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
           </div>
         )}
 
-        {/* Complete Confirmation Modal */}
-        {showCompleteModal && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="glass-card rounded-2xl p-6 max-w-md w-full border-2 border-emerald-500/30"
-            >
-              <div className="text-center mb-6">
-                <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-4">
-                  <CheckCircle className="w-8 h-8 text-emerald-400" />
-                </div>
-                <h3 className="text-2xl font-bold text-white mb-2">Complete Complaint</h3>
-                <p className="text-gray-400">
-                  Are you sure you want to mark this complaint as complete? This action will permanently archive and remove the complaint from the system.
-                </p>
-              </div>
 
-              <div className="glass-card rounded-xl p-4 mb-6">
-                <p className="text-sm text-gray-400 mb-1">Complaint</p>
-                <p className="text-white font-medium truncate">{complaint.title}</p>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowCompleteModal(false)}
-                  disabled={isDeleting}
-                  className="flex-1 px-4 py-3 glass-card text-white rounded-xl hover:bg-white/10 transition-all disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleComplete}
-                  disabled={isDeleting}
-                  className="flex-1 px-4 py-3 bg-gradient-to-r from-emerald-500 to-green-500 text-white rounded-xl hover:shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isDeleting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Completing...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="w-4 h-4" />
-                      Complete
-                    </>
-                  )}
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
       </main>
     </div>
   )

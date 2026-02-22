@@ -267,11 +267,8 @@ class ApiClient {
     return response.data
   }
 
-  async deleteComplaint(id: string, confirm: boolean = true): Promise<void> {
-    await this.request(`/api/complaints/${id}?confirm=${confirm}`, {
-      method: "DELETE",
-    })
-  }
+
+
 
   /**
    * Subscribe to real-time complaint updates using polling.
@@ -755,6 +752,47 @@ class ApiClient {
       throw new Error(error.message || 'Download failed')
     }
     return response.blob()
+  }
+
+  // ===== STAFF GRIEVANCE METHODS =====
+
+  async getStaffGrievanceOverview(): Promise<{
+    staff_performance: Array<{
+      staff_id: string
+      staff_name: string
+      staff_role: string | null
+      total_assigned: number
+      resolved: number
+      in_process: number
+      resolution_rate: number
+      category_breakdown: Record<string, number>
+      is_top_performer: boolean
+    }>
+    category_analytics: Record<string, { total: number; resolved: number }>
+  }> {
+    const response = await this.request<any>("/api/staff-grievance/overview")
+    return response.data
+  }
+
+  async downloadStaffGrievancePDF(): Promise<Blob> {
+    const url = `${this.baseURL}/api/staff-grievance/report/pdf`
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+      },
+    })
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Download failed' }))
+      throw new Error(error.message || 'Download failed')
+    }
+    return response.blob()
+  }
+
+  async deleteResolvedComplaints(): Promise<{ deleted_count: number }> {
+    const response = await this.request<{ deleted_count: number }>("/api/staff-grievance/resolved", {
+      method: "DELETE",
+    })
+    return response.data
   }
 
   // Token management

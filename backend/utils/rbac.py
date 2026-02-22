@@ -23,7 +23,6 @@ def require_roles(*roles):
 VALID_TRANSITIONS = {
     'Pending': ['Accepted', 'Rejected'],
     'Accepted': ['In-Process'],
-    'In-Process': ['Completed'],
 }
 
 def is_valid_transition(current, new):
