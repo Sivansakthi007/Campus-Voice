@@ -334,11 +334,13 @@ class ComplaintResponse(BaseModel):
     responses: List[Dict[str, Any]]
     timeline: List[Dict[str, Any]]
     anonymous_label: Optional[str] = None
+    resolution_description: Optional[str] = None
 
 class ComplaintUpdate(BaseModel):
     status: Optional[str] = None
     response_text: Optional[str] = None
     assigned_to: Optional[str] = None
+    resolution_description: Optional[str] = None
 
 class SupportVote(BaseModel):
     complaint_id: str
@@ -443,7 +445,8 @@ def filter_complaint_identity(comp: Complaint, user: dict):
         "updated_at": comp.updated_at.isoformat() if comp.updated_at else None,
         "responses": comp.responses,
         "timeline": comp.timeline,
-        "anonymous_label": None
+        "anonymous_label": None,
+        "resolution_description": comp.resolution_description,
     }
 
     if comp.is_anonymous:
@@ -1123,12 +1126,27 @@ async def update_complaint(complaint_id: str, update_data: ComplaintUpdate, curr
                 "HOD cannot accept, reject, or change complaint status. You can only view and assign complaints.",
                 status_code=403
             )
+
+        # Enforce mandatory resolution description when marking as resolved
+        if update_data.status == ComplaintStatus.RESOLVED:
+            if not update_data.resolution_description or not update_data.resolution_description.strip():
+                return create_response(
+                    False,
+                    "Resolution description is required when marking a complaint as Resolved. "
+                    "Please describe what action was taken.",
+                    status_code=400
+                )
+            complaint_obj.resolution_description = update_data.resolution_description.strip()
+
         complaint_obj.status = update_data.status
+        timeline_note = f"Status updated to {update_data.status}"
+        if update_data.status == ComplaintStatus.RESOLVED and complaint_obj.resolution_description:
+            timeline_note += f" — Resolution: {complaint_obj.resolution_description}"
         timeline = complaint_obj.timeline or []
         timeline.append({
             "status": update_data.status,
             "timestamp": now,
-            "note": f"Status updated to {update_data.status}",
+            "note": timeline_note,
             "updated_by": current_user["name"]
         })
         complaint_obj.timeline = timeline

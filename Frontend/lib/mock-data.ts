@@ -37,6 +37,7 @@ export interface Complaint {
   createdAt: string
   updatedAt: string
   resolvedAt?: string
+  resolutionDescription?: string
   feedback?: {
     rating: number
     comment?: string

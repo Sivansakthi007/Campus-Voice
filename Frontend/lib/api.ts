@@ -53,6 +53,7 @@ interface ComplaintUpdateRequest {
   status?: string
   response_text?: string
   assigned_to?: string
+  resolution_description?: string
 }
 
 // API Client Class
@@ -191,6 +192,7 @@ class ApiClient {
       createdAt: data.created_at,
       updatedAt: data.updated_at,
       resolvedAt: data.resolved_at,
+      resolutionDescription: data.resolution_description,
       feedback: data.feedback,
       timeline: (data.timeline || []).map((t: any) => ({
         timestamp: t.timestamp,

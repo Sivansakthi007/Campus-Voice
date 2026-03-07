@@ -14,7 +14,7 @@ import {
   XCircle,
   UserPlus,
   MessageSquare,
-
+  ClipboardCheck,
   Loader2,
 } from "lucide-react"
 import { Sidebar } from "@/components/layout/sidebar"
@@ -41,6 +41,8 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
   const [showAssignModal, setShowAssignModal] = useState(false)
 
   const [selectedStatus, setSelectedStatus] = useState<string>("")
+  const [resolutionDescription, setResolutionDescription] = useState("")
+  const [resolutionError, setResolutionError] = useState(false)
   const [remark, setRemark] = useState("")
   const [selectedStaff, setSelectedStaff] = useState<string>("")
   const [staffList, setStaffList] = useState<Array<{ id: string; name: string; department?: string; staff_role?: string }>>([])
@@ -133,17 +135,30 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
       return
     }
 
+    // Enforce mandatory resolution description for resolved status
+    if (selectedStatus === "resolved" && !resolutionDescription.trim()) {
+      setResolutionError(true)
+      toast.error("Resolution description is required when marking as Resolved")
+      return
+    }
+
     try {
-      const updated = await apiClient.updateComplaint(complaint.id, {
-        status: selectedStatus
-      })
+      const updatePayload: any = { status: selectedStatus }
+      if (selectedStatus === "resolved") {
+        updatePayload.resolution_description = resolutionDescription.trim()
+      }
+
+      const updated = await apiClient.updateComplaint(complaint.id, updatePayload)
 
       setComplaint(updated)
       toast.success("Status updated successfully")
       setShowStatusModal(false)
-    } catch (error) {
+      setSelectedStatus("")
+      setResolutionDescription("")
+      setResolutionError(false)
+    } catch (error: any) {
       console.error("Failed to update status:", error)
-      toast.error("Failed to update status")
+      toast.error(error?.message || "Failed to update status")
     }
   }
 
@@ -423,6 +438,30 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
                 </div>
               )}
 
+              {/* Resolution Description Card */}
+              {complaint.status === "resolved" && complaint.resolutionDescription && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="glass-card rounded-2xl p-6 border border-emerald-500/30"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                      <ClipboardCheck className="w-5 h-5 text-emerald-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-white">Resolution Description</h3>
+                      <p className="text-xs text-emerald-400">Action taken by staff to resolve this complaint</p>
+                    </div>
+                  </div>
+                  <div className="bg-emerald-500/5 rounded-xl p-4 border border-emerald-500/10">
+                    <p className="text-gray-200 leading-relaxed whitespace-pre-wrap">
+                      {complaint.resolutionDescription}
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+
               {/* Timeline - Using new component */}
               <ComplaintTimeline timeline={complaint.timeline} currentStatus={complaint.status} />
 
@@ -569,7 +608,13 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
                 {["in_progress", "resolved"].map((status) => (
                   <button
                     key={status}
-                    onClick={() => setSelectedStatus(status)}
+                    onClick={() => {
+                      setSelectedStatus(status)
+                      if (status !== "resolved") {
+                        setResolutionDescription("")
+                        setResolutionError(false)
+                      }
+                    }}
                     className={`w-full p-4 rounded-xl text-left transition-all ${selectedStatus === status
                       ? "bg-gradient-to-r from-blue-500 to-violet-500 text-white"
                       : "glass-card text-gray-300 hover:bg-white/10"
@@ -579,16 +624,58 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
                   </button>
                 ))}
               </div>
+
+              {/* Resolution Description — shown only when Resolved is selected */}
+              {selectedStatus === "resolved" && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  className="mt-4"
+                >
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Resolution Description <span className="text-red-400">*</span>
+                  </label>
+                  <textarea
+                    value={resolutionDescription}
+                    onChange={(e) => {
+                      setResolutionDescription(e.target.value)
+                      if (e.target.value.trim()) setResolutionError(false)
+                    }}
+                    rows={4}
+                    className={`w-full px-4 py-3 bg-white/5 border rounded-xl text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none transition-all ${resolutionError
+                        ? "border-red-500/70 ring-1 ring-red-500/50"
+                        : "border-white/10"
+                      }`}
+                    placeholder="Describe the action taken to resolve this complaint (e.g., issue fixed, maintenance completed, explanation given)..."
+                  />
+                  {resolutionError && (
+                    <p className="text-red-400 text-xs mt-1.5 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" />
+                      This field is required to mark the complaint as Resolved
+                    </p>
+                  )}
+                </motion.div>
+              )}
+
               <div className="flex gap-3 mt-6">
                 <button
-                  onClick={() => setShowStatusModal(false)}
+                  onClick={() => {
+                    setShowStatusModal(false)
+                    setSelectedStatus("")
+                    setResolutionDescription("")
+                    setResolutionError(false)
+                  }}
                   className="flex-1 px-4 py-3 glass-card text-white rounded-xl hover:bg-white/10 transition-all"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleStatusUpdate}
-                  className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-violet-500 text-white rounded-xl hover:shadow-lg transition-all"
+                  disabled={selectedStatus === "resolved" && !resolutionDescription.trim()}
+                  className={`flex-1 px-4 py-3 rounded-xl text-white font-medium transition-all ${selectedStatus === "resolved" && !resolutionDescription.trim()
+                      ? "bg-gray-600 cursor-not-allowed opacity-50"
+                      : "bg-gradient-to-r from-blue-500 to-violet-500 hover:shadow-lg"
+                    }`}
                 >
                   Update
                 </button>
