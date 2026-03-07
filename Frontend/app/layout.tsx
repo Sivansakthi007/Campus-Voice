@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/next"
 import { Toaster } from "sonner"
 import { ThemeProvider } from "@/components/theme-provider"
 import { FooterWatermark } from "@/components/footer-watermark"
+import { NotificationProvider } from "@/components/notification-provider"
 import "./globals.css"
 
 const _geist = Geist({ subsets: ["latin"] })
@@ -47,7 +48,9 @@ export default function RootLayout({
           enableSystem={false}
           disableTransitionOnChange
         >
-          {children}
+          <NotificationProvider>
+            {children}
+          </NotificationProvider>
           <FooterWatermark />
         </ThemeProvider>
         <Toaster position="top-right" richColors />
@@ -57,3 +60,4 @@ export default function RootLayout({
     </html>
   )
 }
+

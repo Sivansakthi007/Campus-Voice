@@ -127,3 +127,18 @@ class HODReportToggle(Base):
     year = Column(Integer, nullable=False)
     updated_by = Column(String(36), nullable=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class Notification(Base):
+    """Push notification record for staff members when complaints are submitted."""
+    __tablename__ = "notifications"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    user_id = Column(String(36), nullable=False, index=True)
+    complaint_id = Column(String(36), nullable=False)
+    title = Column(String(512), nullable=False)
+    message = Column(Text, nullable=False)
+    category = Column(String(100), nullable=True)
+    student_name = Column(String(255), nullable=True)
+    is_read = Column(Boolean, default=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

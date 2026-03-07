@@ -10,7 +10,7 @@ from pathlib import Path
 from sqlalchemy import select, func, text, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_engine, get_session, Base
-from models import User, Complaint, StaffRating, HODRating, HODReportToggle
+from models import User, Complaint, StaffRating, HODRating, HODReportToggle, Notification
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Dict, Any
 from enum import Enum
@@ -946,6 +946,66 @@ async def auto_assign_complaint(category: str, session: AsyncSession, student_de
         logger.error(f"Error in auto_assign_complaint for category '{category}': {str(e)}")
         return None, None
 
+# ===== NOTIFICATION HELPER =====
+async def create_staff_notifications(complaint_obj: Complaint, session: AsyncSession):
+    """Create notification records for all staff members assigned to the complaint's category.
+    
+    - HOD_CATEGORIES: notifies the HOD of the student's department
+    - Other categories: notifies ALL staff with the matching staff_role
+    """
+    try:
+        category = complaint_obj.category
+        if not category:
+            return
+
+        target_users = []
+
+        if category in HOD_CATEGORIES:
+            # Notify HOD of the student's department
+            if complaint_obj.student_department:
+                hod_stmt = select(User).where(
+                    User.role == UserRole.HOD,
+                    User.department == complaint_obj.student_department
+                )
+                result = await session.execute(hod_stmt)
+                target_users = list(result.scalars().all())
+        else:
+            # Notify ALL staff with the matching staff_role for this category
+            target_role = CATEGORY_TO_STAFF_ROLE.get(category)
+            if target_role:
+                staff_stmt = select(User).where(
+                    User.role == UserRole.STAFF,
+                    User.staff_role == target_role
+                )
+                result = await session.execute(staff_stmt)
+                target_users = list(result.scalars().all())
+
+        if not target_users:
+            logger.info(f"No staff to notify for category '{category}'")
+            return
+
+        # Determine the student display name (respect anonymity)
+        student_display = "Anonymous Student" if complaint_obj.is_anonymous else (complaint_obj.student_name or "Unknown Student")
+
+        submitted_at = complaint_obj.created_at.strftime("%Y-%m-%d %H:%M") if complaint_obj.created_at else datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
+
+        for staff in target_users:
+            notif = Notification(
+                user_id=staff.id,
+                complaint_id=complaint_obj.id,
+                title=f"New Complaint: {complaint_obj.title}",
+                message=f"Category: {category} | By: {student_display} | {submitted_at}",
+                category=category,
+                student_name=student_display,
+            )
+            session.add(notif)
+
+        await session.commit()
+        logger.info(f"Created {len(target_users)} notification(s) for category '{category}'")
+    except Exception as e:
+        logger.error(f"Failed to create staff notifications: {str(e)}")
+        # Don't fail the complaint creation if notifications fail
+
 # ===== COMPLAINT ENDPOINTS =====
 @api_router.post("/complaints", response_model=ComplaintResponse, status_code=201)
 async def create_complaint(complaint_data: ComplaintCreate, current_user: dict = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
@@ -1054,6 +1114,12 @@ async def create_complaint(complaint_data: ComplaintCreate, current_user: dict =
     
     # Debug logging after commit
     logger.info(f"Complaint created - ID: {complaint_obj.id}, student_id saved: {complaint_obj.student_id}, assigned_to: {complaint_obj.assigned_to}")
+
+    # --- CREATE NOTIFICATIONS FOR ASSIGNED STAFF ---
+    try:
+        await create_staff_notifications(complaint_obj, session)
+    except Exception as notif_err:
+        logger.error(f"Notification creation failed (non-blocking): {str(notif_err)}")
 
     # --- IDENTITY FILTERING FOR ANONYMOUS COMPLAINTS ---
     response_data = filter_complaint_identity(complaint_obj, current_user)
@@ -3129,6 +3195,71 @@ async def delete_resolved_complaints(
     return create_response(True, f"Successfully deleted {count} resolved complaints", {"deleted_count": count})
 
 
+# ===== NOTIFICATION ENDPOINTS =====
+
+@api_router.get("/notifications")
+async def get_notifications(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get all notifications for the current user, ordered newest first."""
+    stmt = select(Notification).where(
+        Notification.user_id == current_user["id"]
+    ).order_by(Notification.created_at.desc()).limit(50)
+    
+    result = await session.execute(stmt)
+    notifications = result.scalars().all()
+    
+    data = []
+    for n in notifications:
+        data.append({
+            "id": n.id,
+            "complaint_id": n.complaint_id,
+            "title": n.title,
+            "message": n.message,
+            "category": n.category,
+            "student_name": n.student_name,
+            "is_read": n.is_read,
+            "created_at": n.created_at.isoformat() if n.created_at else None,
+        })
+    
+    return create_response(True, "Notifications retrieved successfully", data)
+
+
+@api_router.put("/notifications/{notification_id}/read")
+async def mark_notification_read(
+    notification_id: str,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Mark a single notification as read."""
+    notif = await session.get(Notification, notification_id)
+    if not notif:
+        return create_response(False, "Notification not found", status_code=404)
+    if notif.user_id != current_user["id"]:
+        return create_response(False, "Permission denied", status_code=403)
+    
+    notif.is_read = True
+    await session.commit()
+    return create_response(True, "Notification marked as read")
+
+
+@api_router.get("/notifications/unread-count")
+async def get_unread_notification_count(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get the count of unread notifications for the current user."""
+    stmt = select(func.count(Notification.id)).where(
+        Notification.user_id == current_user["id"],
+        Notification.is_read == False
+    )
+    result = await session.execute(stmt)
+    count = result.scalar() or 0
+    
+    return create_response(True, "Unread count retrieved", {"unread_count": count})
+
+
 # Include router
 app.include_router(api_router)
 
@@ -3168,6 +3299,8 @@ async def shutdown_db_client():
             await eng.dispose()
     except Exception as exc:
         logger.exception("Error disposing DB engine: %s", exc)
+
+
 
 def role_checker(allowed_roles):
     def decorator(func):

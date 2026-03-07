@@ -798,6 +798,33 @@ class ApiClient {
     return response.data
   }
 
+  // ===== NOTIFICATION METHODS =====
+
+  async getNotifications(): Promise<Array<{
+    id: string
+    complaint_id: string
+    title: string
+    message: string
+    category: string | null
+    student_name: string | null
+    is_read: boolean
+    created_at: string | null
+  }>> {
+    const response = await this.request<any[]>("/api/notifications")
+    return response.data || []
+  }
+
+  async markNotificationRead(notificationId: string): Promise<void> {
+    await this.request(`/api/notifications/${notificationId}/read`, {
+      method: "PUT",
+    })
+  }
+
+  async getUnreadNotificationCount(): Promise<number> {
+    const response = await this.request<{ unread_count: number }>("/api/notifications/unread-count")
+    return response.data?.unread_count || 0
+  }
+
   // Token management
   setToken(token: string | null) {
     this.token = token

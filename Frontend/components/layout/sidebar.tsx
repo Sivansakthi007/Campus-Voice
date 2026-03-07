@@ -24,6 +24,7 @@ import {
 import { USER_ROLES, ROLE_COLORS, type UserRole } from "@/lib/constants"
 import { mockStorage } from "@/lib/mock-data"
 import { toast } from "sonner"
+import { NotificationBell } from "@/components/ui/notification-bell"
 
 interface SidebarProps {
   role: UserRole
@@ -113,10 +114,14 @@ export function Sidebar({ role }: SidebarProps) {
           <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${colors.gradient} flex items-center justify-center`}>
             <GraduationCap className="w-5 h-5 text-white" />
           </div>
-          <div>
+          <div className="flex-1">
             <h2 className="font-bold text-white">CampusVoice</h2>
             <p className={`text-xs ${colors.text}`}>{role.toUpperCase()}</p>
           </div>
+          {/* Notification Bell — visible for staff/HOD/principal/admin */}
+          {role !== USER_ROLES.STUDENT && (
+            <NotificationBell role={role} />
+          )}
         </div>
         {user && (
           <div className="glass-card rounded-xl p-3">
