@@ -25,6 +25,7 @@ export interface Complaint {
   studentEmail?: string
   assignedTo?: string
   assignedToName?: string
+  assignedToAll?: Array<{ id: string; name: string }>
   attachments: string[]
   evidenceTags: string[]
   aiAnalysis?: {

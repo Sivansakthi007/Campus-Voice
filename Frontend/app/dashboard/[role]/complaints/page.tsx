@@ -135,13 +135,13 @@ export default function MyComplaintsPage() {
     <div className="min-h-screen bg-gradient-to-br from-[rgb(15,15,20)] via-[rgb(24,24,32)] to-[rgb(15,15,20)] flex">
       <Sidebar role={role as any} />
 
-      <main className="flex-1 p-8 lg:p-12">
+      <main className="flex-1 p-4 md:p-8 lg:p-12">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           {/* Header */}
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-8 gap-4">
             <div>
-              <h1 className="text-4xl font-bold text-white mb-2">My Complaints</h1>
-              <p className="text-gray-400">{filteredComplaints.length} complaint(s) found</p>
+              <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-2">My Complaints</h1>
+              <p className="text-gray-400 text-sm md:text-base">{filteredComplaints.length} complaint(s) found</p>
             </div>
             {role !== USER_ROLES.HOD && (
               <button
@@ -200,9 +200,9 @@ export default function MyComplaintsPage() {
               </button>
             </div>
           ) : filteredComplaints.length === 0 ? (
-            <div className="glass-card rounded-2xl p-12 text-center">
-              <FileText className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-              <p className="text-gray-400 mb-4">No complaints found</p>
+            <div className="glass-card rounded-2xl p-8 md:p-12 text-center">
+              <FileText className="w-12 h-12 md:w-16 md:h-16 text-gray-600 mx-auto mb-4" />
+              <p className="text-gray-400 mb-4 text-sm md:text-base">No complaints found</p>
               <button
                 onClick={() => router.push(`/dashboard/${role}/submit`)}
                 className="px-6 py-3 bg-gradient-to-r from-blue-500 to-violet-500 rounded-xl text-white font-medium hover:shadow-lg transition-all"
@@ -219,7 +219,7 @@ export default function MyComplaintsPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.05 }}
                   onClick={() => router.push(`/dashboard/${role}/complaint-details?id=${complaint.id}`)}
-                  className="glass-card rounded-xl p-6 hover:bg-white/10 transition-all cursor-pointer"
+                  className="glass-card rounded-xl p-4 md:p-6 hover:bg-white/10 transition-all cursor-pointer"
                 >
                   <div className="flex flex-col lg:flex-row lg:items-center gap-4">
                     {/* Status Icon */}

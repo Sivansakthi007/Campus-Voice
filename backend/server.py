@@ -156,6 +156,25 @@ async def startup():
                         logger.info("Migration: 'student_department' column already exists")
             except Exception as migration_err:
                 logger.warning(f"Migration check for student_department column: {str(migration_err)}")
+
+            # Safe migration: add assigned_to_all column to complaints if it doesn't exist
+            try:
+                async with engine.begin() as conn:
+                    result = await conn.execute(text(
+                        "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
+                        "WHERE TABLE_NAME = 'complaints' AND COLUMN_NAME = 'assigned_to_all'"
+                    ))
+                    column_exists = result.fetchone() is not None
+                    
+                    if not column_exists:
+                        await conn.execute(text(
+                            "ALTER TABLE complaints ADD COLUMN assigned_to_all JSON NULL"
+                        ))
+                        logger.info("Migration: Added 'assigned_to_all' column to complaints table")
+                    else:
+                        logger.info("Migration: 'assigned_to_all' column already exists")
+            except Exception as migration_err:
+                logger.warning(f"Migration check for assigned_to_all column: {str(migration_err)}")
             
             logger.info("Database connection established successfully!")
             return
@@ -246,6 +265,12 @@ CATEGORY_TO_STAFF_ROLE = {
     "Office": "Clerk",
 }
 
+# Reverse mapping: Staff Role -> list of complaint categories
+# Used to determine which complaints a staff member should see
+STAFF_ROLE_TO_CATEGORIES: Dict[str, list] = {}
+for _cat, _role in CATEGORY_TO_STAFF_ROLE.items():
+    STAFF_ROLE_TO_CATEGORIES.setdefault(_role, []).append(_cat)
+
 class SentimentType(str):
     POSITIVE = "Positive"
     NEGATIVE = "Negative"
@@ -333,6 +358,7 @@ class ComplaintResponse(BaseModel):
     support_count: int
     assigned_to: Optional[str] = None
     assigned_to_name: Optional[str] = None
+    assigned_to_all: List[Dict[str, Any]] = []
     assigned_at: Optional[str] = None
     created_at: str
     updated_at: str
@@ -445,6 +471,7 @@ def filter_complaint_identity(comp: Complaint, user: dict):
         "support_count": comp.support_count,
         "assigned_to": comp.assigned_to,
         "assigned_to_name": comp.assigned_to_name,
+        "assigned_to_all": comp.assigned_to_all or [],
         "assigned_at": comp.assigned_at.isoformat() if comp.assigned_at else None,
         "created_at": comp.created_at.isoformat() if comp.created_at else None,
         "updated_at": comp.updated_at.isoformat() if comp.updated_at else None,
@@ -876,20 +903,21 @@ async def auto_assign_complaint(category: str, session: AsyncSession, student_de
 
     - HOD_CATEGORIES (Academic Issues, Staff Behavior): assigned to the HOD
       of the student's department.
-    - All other categories: assigned to staff matching CATEGORY_TO_STAFF_ROLE,
-      load-balanced by fewest active complaints.
+    - All other categories: assigned to ALL staff matching CATEGORY_TO_STAFF_ROLE.
 
-    Returns (staff_id, staff_name) or (None, None). Never raises.
+    Returns (primary_staff_id, primary_staff_name, all_staff_list) or (None, None, []).
+    all_staff_list is a list of {"id": ..., "name": ...} dicts.
+    Never raises.
     """
     try:
         if not category:
-            return None, None
+            return None, None, []
 
         # ── HOD-based assignment ──
         if category in HOD_CATEGORIES:
             if not student_department:
                 logger.warning(f"Cannot assign '{category}' complaint — student department is unknown")
-                return None, None
+                return None, None, []
 
             hod_stmt = select(User).where(
                 User.role == UserRole.HOD,
@@ -903,19 +931,20 @@ async def auto_assign_complaint(category: str, session: AsyncSession, student_de
                     f"No HOD found for department '{student_department}' "
                     f"to handle '{category}' complaint"
                 )
-                return None, None
+                return None, None, []
 
             logger.info(
                 f"Auto-assigning '{category}' complaint to HOD "
                 f"'{hod.name}' (dept: {student_department})"
             )
-            return hod.id, hod.name
+            all_staff = [{"id": hod.id, "name": hod.name}]
+            return hod.id, hod.name, all_staff
 
-        # ── Role-based assignment ──
+        # ── Role-based assignment: assign to ALL matching staff ──
         target_role = CATEGORY_TO_STAFF_ROLE.get(category)
         if not target_role:
             logger.info(f"No staff role mapping for category '{category}', skipping auto-assign")
-            return None, None
+            return None, None, []
 
         # Find all staff with the matching staff_role
         staff_stmt = select(User).where(
@@ -927,9 +956,12 @@ async def auto_assign_complaint(category: str, session: AsyncSession, student_de
 
         if not staff_list:
             logger.warning(f"No staff found with role '{target_role}' for category '{category}'")
-            return None, None
+            return None, None, []
 
-        # Pick staff with fewest active (non-resolved, non-rejected) complaints
+        # Build list of all assigned staff
+        all_staff = [{"id": s.id, "name": s.name} for s in staff_list]
+
+        # Pick primary assignee: staff with fewest active complaints
         best_staff = None
         min_count = float('inf')
         for staff in staff_list:
@@ -944,13 +976,13 @@ async def auto_assign_complaint(category: str, session: AsyncSession, student_de
                 best_staff = staff
 
         if best_staff:
-            logger.info(f"Auto-assigning to staff '{best_staff.name}' (role: {target_role}, active: {min_count})")
-            return best_staff.id, best_staff.name
+            logger.info(f"Auto-assigning to {len(all_staff)} staff (primary: '{best_staff.name}', role: {target_role})")
+            return best_staff.id, best_staff.name, all_staff
 
-        return None, None
+        return None, None, all_staff
     except Exception as e:
         logger.error(f"Error in auto_assign_complaint for category '{category}': {str(e)}")
-        return None, None
+        return None, None, []
 
 # ===== NOTIFICATION HELPER =====
 async def create_staff_notifications(complaint_obj: Complaint, session: AsyncSession):
@@ -1094,17 +1126,20 @@ async def create_complaint(complaint_data: ComplaintCreate, current_user: dict =
 
     # Auto-assign complaint based on category → staff role / HOD mapping
     try:
-        assigned_staff_id, assigned_staff_name = await auto_assign_complaint(
+        assigned_staff_id, assigned_staff_name, all_assigned_staff = await auto_assign_complaint(
             final_category, session, student_department=student_dept
         )
         if assigned_staff_id:
             complaint_obj.assigned_to = assigned_staff_id
             complaint_obj.assigned_to_name = assigned_staff_name
+            complaint_obj.assigned_to_all = all_assigned_staff
             complaint_obj.assigned_at = datetime.now(timezone.utc)
+            # Build display names for timeline
+            all_names = ", ".join(s["name"] for s in all_assigned_staff)
             complaint_obj.timeline.append({
                 "status": "auto_assigned",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "note": f"Auto-assigned to {assigned_staff_name}"
+                "note": f"Auto-assigned to: {all_names}"
             })
     except Exception as e:
         logger.error(f"Auto-assignment failed for category '{final_category}': {str(e)}")
@@ -1144,8 +1179,19 @@ async def get_complaints(current_user: dict = Depends(get_current_user), session
     if current_user["role"] == UserRole.STUDENT:
         stmt = stmt.where(Complaint.student_id == current_user["id"])
     elif current_user["role"] == UserRole.STAFF:
-        # Staff should only see complaints assigned to them
-        stmt = stmt.where(Complaint.assigned_to == current_user["id"])
+        # Staff see all complaints in categories that match their staff_role
+        staff_role = current_user.get("staff_role")
+        matching_categories = STAFF_ROLE_TO_CATEGORIES.get(staff_role, []) if staff_role else []
+        if matching_categories:
+            stmt = stmt.where(
+                or_(
+                    Complaint.assigned_to == current_user["id"],
+                    Complaint.category.in_(matching_categories)
+                )
+            )
+        else:
+            # Fallback: only see directly assigned complaints
+            stmt = stmt.where(Complaint.assigned_to == current_user["id"])
     elif current_user["role"] == UserRole.HOD:
         # HOD only sees HOD-category complaints (Academic Issues / Staff Behavior)
         # from their department or assigned to them
@@ -1583,8 +1629,19 @@ async def get_staff_performance(current_user: dict = Depends(get_current_user), 
 
     performance = []
     for staff in staff_users:
-        assigned = (await session.execute(select(func.count()).where(Complaint.assigned_to == staff.id))).scalar() or 0
-        resolved = (await session.execute(select(func.count()).where(Complaint.assigned_to == staff.id, Complaint.status == ComplaintStatus.RESOLVED))).scalar() or 0
+        staff_role = staff.staff_role
+        matching_categories = STAFF_ROLE_TO_CATEGORIES.get(staff_role, []) if staff_role else []
+        
+        if matching_categories:
+            staff_filter = or_(
+                Complaint.assigned_to == staff.id,
+                Complaint.category.in_(matching_categories)
+            )
+        else:
+            staff_filter = Complaint.assigned_to == staff.id
+            
+        assigned = (await session.execute(select(func.count()).where(staff_filter))).scalar() or 0
+        resolved = (await session.execute(select(func.count()).where(staff_filter, Complaint.status == ComplaintStatus.RESOLVED))).scalar() or 0
         pending = assigned - resolved
 
         performance.append({
@@ -1608,27 +1665,38 @@ async def get_my_performance(current_user: dict = Depends(get_current_user), ses
         return create_response(False, "Permission denied. This endpoint is for staff only.", status_code=403)
     
     staff_id = current_user["id"]
+    staff_role = current_user.get("staff_role")
+    matching_categories = STAFF_ROLE_TO_CATEGORIES.get(staff_role, []) if staff_role else []
+    
+    # Build filter: complaints assigned to this staff OR in their category
+    if matching_categories:
+        staff_filter = or_(
+            Complaint.assigned_to == staff_id,
+            Complaint.category.in_(matching_categories)
+        )
+    else:
+        staff_filter = Complaint.assigned_to == staff_id
     
     # Get counts by status
-    total_stmt = select(func.count()).where(Complaint.assigned_to == staff_id)
+    total_stmt = select(func.count()).where(staff_filter)
     resolved_stmt = select(func.count()).where(
-        Complaint.assigned_to == staff_id,
+        staff_filter,
         Complaint.status == ComplaintStatus.RESOLVED
     )
     rejected_stmt = select(func.count()).where(
-        Complaint.assigned_to == staff_id,
+        staff_filter,
         Complaint.status == ComplaintStatus.REJECTED
     )
     in_progress_stmt = select(func.count()).where(
-        Complaint.assigned_to == staff_id,
+        staff_filter,
         Complaint.status == ComplaintStatus.IN_PROGRESS
     )
     submitted_stmt = select(func.count()).where(
-        Complaint.assigned_to == staff_id,
+        staff_filter,
         Complaint.status == ComplaintStatus.SUBMITTED
     )
     reviewed_stmt = select(func.count()).where(
-        Complaint.assigned_to == staff_id,
+        staff_filter,
         Complaint.status == ComplaintStatus.REVIEWED
     )
     
@@ -1643,7 +1711,7 @@ async def get_my_performance(current_user: dict = Depends(get_current_user), ses
     
     # Calculate average resolution time for resolved complaints
     resolved_complaints_stmt = select(Complaint).where(
-        Complaint.assigned_to == staff_id,
+        staff_filter,
         Complaint.status == ComplaintStatus.RESOLVED
     )
     res = await session.execute(resolved_complaints_stmt)
@@ -1682,8 +1750,19 @@ async def get_my_complaints(current_user: dict = Depends(get_current_user), sess
         return create_response(False, "Permission denied. This endpoint is for staff only.", status_code=403)
     
     staff_id = current_user["id"]
+    staff_role = current_user.get("staff_role")
+    matching_categories = STAFF_ROLE_TO_CATEGORIES.get(staff_role, []) if staff_role else []
     
-    stmt = select(Complaint).where(Complaint.assigned_to == staff_id).order_by(Complaint.created_at.desc())
+    if matching_categories:
+        stmt = select(Complaint).where(
+            or_(
+                Complaint.assigned_to == staff_id,
+                Complaint.category.in_(matching_categories)
+            )
+        ).order_by(Complaint.created_at.desc())
+    else:
+        stmt = select(Complaint).where(Complaint.assigned_to == staff_id).order_by(Complaint.created_at.desc())
+    
     res = await session.execute(stmt)
     complaints = res.scalars().all()
     

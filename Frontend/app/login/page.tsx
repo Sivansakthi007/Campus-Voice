@@ -127,8 +127,8 @@ export default function LoginPage() {
             {/* Role Selection */}
             {!selectedRole && (
               <div className="max-w-4xl mx-auto">
-                <p className="text-center text-gray-300 mb-6 text-lg">Select your role to continue</p>
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                <p className="text-center text-gray-300 mb-6 text-sm md:text-lg">Select your role to continue</p>
+                <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4 mb-4">
                   {ROLE_OPTIONS.map((role, index) => {
                     const Icon = role.icon
                     const colors = ROLE_COLORS[role.value]
@@ -141,14 +141,14 @@ export default function LoginPage() {
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={() => setSelectedRole(role.value)}
-                        className={`glass-card p-6 rounded-xl text-center group hover:border-opacity-50 transition-all ${colors.border}`}
+                        className={`glass-card p-4 md:p-6 rounded-xl text-center group hover:border-opacity-50 transition-all ${colors.border}`}
                       >
                         <div
-                          className={`w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br ${colors.gradient} flex items-center justify-center shadow-lg`}
+                          className={`w-12 h-12 md:w-16 md:h-16 mx-auto mb-3 md:mb-4 rounded-xl md:rounded-2xl bg-gradient-to-br ${colors.gradient} flex items-center justify-center shadow-lg`}
                         >
-                          <Icon className="w-8 h-8 text-white" />
+                          <Icon className="w-6 h-6 md:w-8 md:h-8 text-white" />
                         </div>
-                        <h3 className="text-lg font-semibold text-white">{role.label}</h3>
+                        <h3 className="text-sm md:text-lg font-semibold text-white">{role.label}</h3>
                       </motion.button>
                     )
                   })}

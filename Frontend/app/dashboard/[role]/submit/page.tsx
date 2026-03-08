@@ -187,39 +187,39 @@ export default function SubmitComplaintPage({ params }: { params: Promise<{ role
     <div className="min-h-screen bg-gradient-to-br from-[rgb(15,15,20)] via-[rgb(24,24,32)] to-[rgb(15,15,20)] flex">
       <Sidebar role={role} />
 
-      <main className="flex-1 p-8 lg:p-12 overflow-y-auto">
+      <main className="flex-1 p-4 md:p-8 lg:p-12 overflow-y-auto">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-4xl mx-auto">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-4xl font-bold mb-2" style={{ color: '#FFFFFF' }}>Submit Complaint</h1>
-            <p style={{ color: '#D1D5DB' }}>We're here to help resolve your concerns</p>
+            <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold mb-2" style={{ color: '#FFFFFF' }}>Submit Complaint</h1>
+            <p className="text-sm md:text-base" style={{ color: '#D1D5DB' }}>We're here to help resolve your concerns</p>
           </div>
 
           {/* Progress Steps */}
-          <div className="flex items-center justify-between mb-8 relative">
-            <div className="absolute top-5 left-0 right-0 h-0.5 bg-white/10" />
+          <div className="flex items-center justify-between mb-8 relative px-2">
+            <div className="absolute top-5 left-4 right-4 h-0.5 bg-white/10" />
             <div
-              className="absolute top-5 left-0 h-0.5 bg-gradient-to-r from-blue-500 to-violet-500 transition-all duration-500"
-              style={{ width: `${((step - 1) / 2) * 100}%` }}
+              className="absolute top-5 left-4 h-0.5 bg-gradient-to-r from-blue-500 to-violet-500 transition-all duration-500"
+              style={{ width: `calc(${((step - 1) / 2) * 100}% - 8px)` }}
             />
             {[1, 2, 3].map((s) => (
-              <div key={s} className="relative">
+              <div key={s} className="relative z-10">
                 <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${s <= step
+                  className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center text-sm md:text-base font-semibold transition-all ${s <= step
                     ? "bg-gradient-to-r from-blue-500 to-violet-500 text-white shadow-lg"
                     : "bg-white/10 text-gray-400"
                     }`}
                 >
-                  {s < step ? <CheckCircle className="w-5 h-5" /> : s}
+                  {s < step ? <CheckCircle className="w-4 h-4 md:w-5 md:h-5" /> : s}
                 </div>
-                <p className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs text-gray-400 whitespace-nowrap">
+                <p className={`absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] md:text-xs text-gray-400 whitespace-nowrap ${s === step ? "text-white font-medium" : ""}`}>
                   {s === 1 ? "Details" : s === 2 ? "AI Analysis" : "Review"}
                 </p>
               </div>
             ))}
           </div>
 
-          <div className="glass-card rounded-2xl p-8 mt-12">
+          <div className="glass-card rounded-2xl p-5 md:p-8 mt-12">
             {/* Step 1: Details */}
             {step === 1 && (
               <div className="space-y-6">
@@ -230,31 +230,30 @@ export default function SubmitComplaintPage({ params }: { params: Promise<{ role
                     type="text"
                     value={formData.title}
                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-sm placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Brief summary of your complaint"
                   />
                 </div>
 
                 {/* Description */}
                 <div>
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
                     <label className="block text-sm font-medium text-gray-300">Description</label>
                     <button
                       onClick={handleVoiceInput}
-
-                      className={`flex items-center gap-2 px-3 py-1 rounded-lg text-sm transition-all ${isRecording
+                      className={`flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-all ${isRecording
                         ? "bg-red-500/20 text-red-400 animate-pulse"
                         : "bg-white/5 text-gray-400 hover:bg-white/10"
                         }`}
                     >
                       {isRecording ? (
                         <>
-                          <MicOff className="w-4 h-4" />
+                          <MicOff className="w-3.5 h-3.5" />
                           Recording...
                         </>
                       ) : (
                         <>
-                          <Mic className="w-4 h-4" />
+                          <Mic className="w-3.5 h-3.5" />
                           Voice Input
                         </>
                       )}
@@ -264,21 +263,21 @@ export default function SubmitComplaintPage({ params }: { params: Promise<{ role
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     rows={6}
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-sm placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                     placeholder="Provide detailed information about your complaint..."
                   />
                 </div>
 
                 {/* Anonymous Toggle */}
-                <div className="flex items-center gap-3 glass-card rounded-xl p-4">
+                <div className="flex items-start gap-3 glass-card rounded-xl p-4">
                   <input
                     type="checkbox"
                     id="anonymous"
                     checked={formData.isAnonymous}
                     onChange={(e) => setFormData({ ...formData, isAnonymous: e.target.checked })}
-                    className="w-5 h-5 rounded bg-white/10 border-white/20"
+                    className="w-5 h-5 mt-0.5 rounded bg-white/10 border-white/20 shrink-0"
                   />
-                  <label htmlFor="anonymous" className="text-gray-300 cursor-pointer">
+                  <label htmlFor="anonymous" className="text-sm text-gray-300 cursor-pointer">
                     Submit anonymously (your identity will be hidden)
                   </label>
                 </div>
@@ -289,7 +288,7 @@ export default function SubmitComplaintPage({ params }: { params: Promise<{ role
                   <select
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white [&>option]:bg-[rgb(30,30,40)] [&>option]:text-white"
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm [&>option]:bg-[rgb(30,30,40)] [&>option]:text-white"
                   >
                     <option value="" className="bg-[rgb(30,30,40)] text-gray-400">Select category</option>
                     {COMPLAINT_CATEGORIES.map((cat) => (
@@ -306,21 +305,21 @@ export default function SubmitComplaintPage({ params }: { params: Promise<{ role
                   <label className="block glass-card rounded-xl p-6 border-2 border-dashed border-white/20 hover:border-blue-500/50 cursor-pointer transition-all">
                     <input type="file" multiple onChange={handleFileUpload} className="hidden" />
                     <div className="text-center">
-                      <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                      <p className="text-gray-400 text-sm">Click to upload files</p>
-                      <p className="text-gray-500 text-xs mt-1">PDF, Images, Videos supported</p>
+                      <Upload className="w-6 h-6 md:w-8 md:h-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-gray-400 text-xs md:text-sm">Click to upload files</p>
+                      <p className="text-gray-500 text-[10px] md:text-xs mt-1">PDF, Images, Videos supported</p>
                     </div>
                   </label>
 
                   {/* Uploaded Files */}
                   {formData.attachments.length > 0 && (
-                    <div className="grid grid-cols-3 gap-3 mt-4">
+                    <div className="grid grid-cols-2 xs:grid-cols-3 gap-3 mt-4">
                       {formData.attachments.map((file, index) => (
                         <div key={index} className="relative glass-card rounded-xl p-2 group">
                           <img
                             src={file || "/placeholder.svg"}
                             alt="attachment"
-                            className="w-full h-24 object-cover rounded-lg"
+                            className="w-full h-20 md:h-24 object-cover rounded-lg"
                           />
                           <button
                             onClick={() =>
@@ -329,7 +328,7 @@ export default function SubmitComplaintPage({ params }: { params: Promise<{ role
                                 attachments: formData.attachments.filter((_, i) => i !== index),
                               })
                             }
-                            className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                           >
                             <X className="w-4 h-4 text-white" />
                           </button>
@@ -347,7 +346,7 @@ export default function SubmitComplaintPage({ params }: { params: Promise<{ role
                       <button
                         key={tag}
                         onClick={() => toggleEvidenceTag(tag)}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${formData.evidenceTags.includes(tag)
+                        className={`px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-all ${formData.evidenceTags.includes(tag)
                           ? "bg-gradient-to-r from-blue-500 to-violet-500 text-white"
                           : "bg-white/5 text-gray-400 hover:bg-white/10"
                           }`}
@@ -368,96 +367,98 @@ export default function SubmitComplaintPage({ params }: { params: Promise<{ role
                     <motion.div
                       animate={{ rotate: 360 }}
                       transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
-                      className="w-20 h-20 mx-auto mb-6"
+                      className="w-16 h-16 md:w-20 md:h-20 mx-auto mb-6"
                     >
-                      <div className="w-20 h-20 rounded-full bg-gradient-to-r from-blue-500 to-violet-500 flex items-center justify-center">
-                        <Brain className="w-10 h-10 text-white" />
+                      <div className="w-full h-full rounded-full bg-gradient-to-r from-blue-500 to-violet-500 flex items-center justify-center">
+                        <Brain className="w-8 h-8 md:w-10 md:h-10 text-white" />
                       </div>
                     </motion.div>
-                    <h3 className="text-2xl font-bold text-white mb-2">Analyzing Your Complaint</h3>
-                    <p className="text-gray-400">AI is processing your submission...</p>
+                    <h3 className="text-xl md:text-2xl font-bold text-white mb-2">Analyzing Your Complaint</h3>
+                    <p className="text-sm md:text-base text-gray-400">AI is processing your submission...</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
                     <div className="text-center mb-6">
-                      <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center">
-                        <Sparkles className="w-8 h-8 text-white" />
+                      <div className="w-12 h-12 md:w-16 md:h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center">
+                        <Sparkles className="w-6 h-6 md:w-8 md:h-8 text-white" />
                       </div>
-                      <h3 className="text-2xl font-bold text-white mb-2">AI Analysis Complete</h3>
-                      <p className="text-gray-400">Here's what we found</p>
+                      <h3 className="text-xl md:text-2xl font-bold text-white mb-2">AI Analysis Complete</h3>
+                      <p className="text-xs md:text-sm text-gray-400">Here's what we found</p>
                     </div>
 
-                    {/* Sentiment */}
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: 0.1 }}
-                      className="glass-card rounded-xl p-4"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center">
-                          <AlertCircle className="w-5 h-5 text-red-400" />
+                    <div className="grid grid-cols-1 xs:grid-cols-2 gap-4">
+                      {/* Sentiment */}
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 0.1 }}
+                        className="glass-card rounded-xl p-4"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 md:w-10 md:h-10 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
+                            <AlertCircle className="w-4 h-4 md:w-5 md:h-5 text-red-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] md:text-sm text-gray-400">Sentiment Analysis</p>
+                            <p className="font-semibold text-sm md:text-base text-white capitalize truncate">{aiAnalysis.sentiment}</p>
+                          </div>
                         </div>
-                        <div className="flex-1">
-                          <p className="text-sm text-gray-400">Sentiment Analysis</p>
-                          <p className="font-semibold text-white capitalize">{aiAnalysis.sentiment}</p>
-                        </div>
-                      </div>
-                    </motion.div>
+                      </motion.div>
 
-                    {/* Category */}
-                    <motion.div
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.2 }}
-                      className="glass-card rounded-xl p-4"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                          <Hash className="w-5 h-5 text-blue-400" />
+                      {/* Category */}
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 }}
+                        className="glass-card rounded-xl p-4"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 md:w-10 md:h-10 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+                            <Hash className="w-4 h-4 md:w-5 md:h-5 text-blue-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] md:text-sm text-gray-400">Suggested Category</p>
+                            <p className="font-semibold text-sm md:text-base text-white truncate">{aiAnalysis.suggestedCategory}</p>
+                          </div>
                         </div>
-                        <div className="flex-1">
-                          <p className="text-sm text-gray-400">Suggested Category</p>
-                          <p className="font-semibold text-white">{aiAnalysis.suggestedCategory}</p>
-                        </div>
-                      </div>
-                    </motion.div>
+                      </motion.div>
 
-                    {/* Priority */}
-                    <motion.div
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.3 }}
-                      className="glass-card rounded-xl p-4"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-violet-500/10 flex items-center justify-center">
-                          <TrendingUp className="w-5 h-5 text-violet-400" />
+                      {/* Priority */}
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3 }}
+                        className="glass-card rounded-xl p-4"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 md:w-10 md:h-10 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
+                            <TrendingUp className="w-4 h-4 md:w-5 md:h-5 text-violet-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] md:text-sm text-gray-400">Priority Level</p>
+                            <p className="font-semibold text-sm md:text-base text-white capitalize truncate">{aiAnalysis.suggestedPriority}</p>
+                          </div>
                         </div>
-                        <div className="flex-1">
-                          <p className="text-sm text-gray-400">Priority Level</p>
-                          <p className="font-semibold text-white capitalize">{aiAnalysis.suggestedPriority}</p>
-                        </div>
-                      </div>
-                    </motion.div>
+                      </motion.div>
 
-                    {/* Foul Language */}
-                    <motion.div
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.4 }}
-                      className="glass-card rounded-xl p-4"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-yellow-500/10 flex items-center justify-center">
-                          <ShieldAlert className="w-5 h-5 text-yellow-400" />
+                      {/* Foul Language */}
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.4 }}
+                        className="glass-card rounded-xl p-4"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 md:w-10 md:h-10 rounded-lg bg-yellow-500/10 flex items-center justify-center shrink-0">
+                            <ShieldAlert className="w-4 h-4 md:w-5 md:h-5 text-yellow-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] md:text-sm text-gray-400">Language Severity</p>
+                            <p className="font-semibold text-sm md:text-base text-white capitalize truncate">{aiAnalysis.foulLanguageSeverity}</p>
+                          </div>
                         </div>
-                        <div className="flex-1">
-                          <p className="text-sm text-gray-400">Language Severity</p>
-                          <p className="font-semibold text-white capitalize">{aiAnalysis.foulLanguageSeverity}</p>
-                        </div>
-                      </div>
-                    </motion.div>
+                      </motion.div>
+                    </div>
 
                     {/* Duplicate Check */}
                     {aiAnalysis.isDuplicate ? (
@@ -468,21 +469,21 @@ export default function SubmitComplaintPage({ params }: { params: Promise<{ role
                         className="glass-card rounded-xl p-4 border border-yellow-500/30"
                       >
                         <div className="flex items-start gap-3 mb-3">
-                          <AlertCircle className="w-5 h-5 text-yellow-400 mt-0.5" />
+                          <AlertCircle className="w-5 h-5 text-yellow-400 mt-0.5 shrink-0" />
                           <div className="flex-1">
-                            <p className="text-yellow-400 font-medium mb-1">Possible duplicate complaints found</p>
-                            <p className="text-sm text-gray-400">Similar complaints have been submitted:</p>
+                            <p className="text-yellow-400 text-sm font-medium mb-1">Possible duplicate complaints found</p>
+                            <p className="text-xs text-gray-400">Similar complaints have been submitted:</p>
                           </div>
                         </div>
                         <div className="space-y-2 mt-3">
                           {aiAnalysis.duplicateComplaints.map((complaint) => (
                             <div key={complaint.id} className="bg-white/5 rounded-lg p-3 border border-white/10">
-                              <p className="text-white font-medium text-sm">{complaint.title}</p>
-                              <p className="text-xs text-gray-400 mt-1">Status: {complaint.status}</p>
+                              <p className="text-white font-medium text-xs md:text-sm truncate">{complaint.title}</p>
+                              <p className="text-[10px] text-gray-400 mt-1">Status: {complaint.status}</p>
                             </div>
                           ))}
                         </div>
-                        <p className="text-xs text-gray-400 mt-3">You can still proceed if your complaint is unique.</p>
+                        <p className="text-[10px] text-gray-400 mt-3">You can still proceed if your complaint is unique.</p>
                       </motion.div>
                     ) : (
                       <motion.div
@@ -492,8 +493,8 @@ export default function SubmitComplaintPage({ params }: { params: Promise<{ role
                         className="glass-card rounded-xl p-4 border border-emerald-500/30"
                       >
                         <div className="flex items-center gap-3">
-                          <CheckCircle className="w-5 h-5 text-emerald-400" />
-                          <p className="text-emerald-400 font-medium">No duplicate complaints found</p>
+                          <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
+                          <p className="text-emerald-400 text-sm font-medium">No duplicate complaints found</p>
                         </div>
                       </motion.div>
                     )}
@@ -506,35 +507,35 @@ export default function SubmitComplaintPage({ params }: { params: Promise<{ role
             {step === 3 && (
               <div className="space-y-6">
                 <div className="text-center mb-6">
-                  <Eye className="w-16 h-16 text-blue-400 mx-auto mb-4" />
-                  <h3 className="text-2xl font-bold text-white mb-2">Review Your Complaint</h3>
-                  <p className="text-gray-400">Make sure everything looks correct</p>
+                  <Eye className="w-12 h-12 md:w-16 md:h-16 text-blue-400 mx-auto mb-4" />
+                  <h3 className="text-xl md:text-2xl font-bold text-white mb-2">Review Your Complaint</h3>
+                  <p className="text-xs md:text-sm text-gray-400">Make sure everything looks correct</p>
                 </div>
 
                 <div className="space-y-4">
                   <div className="glass-card rounded-xl p-4">
-                    <p className="text-sm text-gray-400 mb-1">Title</p>
-                    <p className="text-white font-medium">{formData.title}</p>
+                    <p className="text-[10px] md:text-sm text-gray-400 mb-1">Title</p>
+                    <p className="text-white text-sm md:text-base font-medium">{formData.title}</p>
                   </div>
                   <div className="glass-card rounded-xl p-4">
-                    <p className="text-sm text-gray-400 mb-1">Description</p>
-                    <p className="text-white">{formData.description}</p>
+                    <p className="text-[10px] md:text-sm text-gray-400 mb-1">Description</p>
+                    <p className="text-white text-sm md:text-base leading-relaxed">{formData.description}</p>
                   </div>
                   <div className="glass-card rounded-xl p-4">
-                    <p className="text-sm text-gray-400 mb-1">Category & Priority</p>
-                    <p className="text-white font-medium">
+                    <p className="text-[10px] md:text-sm text-gray-400 mb-1">Category & Priority</p>
+                    <p className="text-white text-sm md:text-base font-medium">
                       {formData.category || aiAnalysis.suggestedCategory} - {aiAnalysis.suggestedPriority.toUpperCase()}
                     </p>
                   </div>
                   {formData.attachments.length > 0 && (
                     <div className="glass-card rounded-xl p-4">
-                      <p className="text-sm text-gray-400 mb-2">Attachments</p>
-                      <p className="text-white">{formData.attachments.length} file(s) attached</p>
+                      <p className="text-[10px] md:text-sm text-gray-400 mb-2">Attachments</p>
+                      <p className="text-white text-sm">{formData.attachments.length} file(s) attached</p>
                     </div>
                   )}
                   {formData.isAnonymous && (
                     <div className="glass-card rounded-xl p-4 border border-blue-500/30">
-                      <p className="text-blue-400">This complaint will be submitted anonymously</p>
+                      <p className="text-blue-400 text-xs md:text-sm">This complaint will be submitted anonymously</p>
                     </div>
                   )}
                 </div>
@@ -547,9 +548,9 @@ export default function SubmitComplaintPage({ params }: { params: Promise<{ role
             {step > 1 && (
               <button
                 onClick={() => setStep(step - 1)}
-                className="flex items-center gap-2 px-6 py-3 glass-card rounded-xl text-white hover:bg-white/10 transition-all"
+                className="flex items-center gap-2 px-4 py-2 md:px-6 md:py-3 glass-card rounded-xl text-white text-sm md:text-base hover:bg-white/10 transition-all font-medium"
               >
-                <ChevronLeft className="w-5 h-5" />
+                <ChevronLeft className="w-4 h-4 md:w-5 md:h-5" />
                 Back
               </button>
             )}
@@ -557,23 +558,23 @@ export default function SubmitComplaintPage({ params }: { params: Promise<{ role
               <button
                 onClick={handleNext}
                 disabled={step === 2 && !showAIAnalysis}
-                className={`flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-violet-500 rounded-xl text-white font-medium ml-auto ${step === 2 && !showAIAnalysis ? "opacity-50 cursor-not-allowed" : "hover:shadow-lg"
+                className={`flex items-center gap-2 px-5 py-2 md:px-6 md:py-3 bg-gradient-to-r from-blue-500 to-violet-500 rounded-xl text-white text-sm md:text-base font-medium ml-auto ${step === 2 && !showAIAnalysis ? "opacity-50 cursor-not-allowed" : "hover:shadow-lg"
                   } transition-all`}
               >
                 Next
-                <ChevronRight className="w-5 h-5" />
+                <ChevronRight className="w-4 h-4 md:w-5 md:h-5" />
               </button>
             ) : (
               <button
                 onClick={handleSubmit}
                 disabled={isSubmitting}
-                className={`flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-xl text-white font-medium ml-auto hover:shadow-lg transition-all ${isSubmitting ? "opacity-50 cursor-not-allowed" : ""
+                className={`flex items-center gap-2 px-5 py-2 md:px-6 md:py-3 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-xl text-white text-sm md:text-base font-medium ml-auto hover:shadow-lg transition-all ${isSubmitting ? "opacity-50 cursor-not-allowed" : ""
                   }`}
               >
                 {isSubmitting ? (
-                  <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
+                  <div className="animate-spin w-4 h-4 md:w-5 md:h-5 border-2 border-white border-t-transparent rounded-full" />
                 ) : (
-                  <CheckCircle className="w-5 h-5" />
+                  <CheckCircle className="w-4 h-4 md:w-5 md:h-5" />
                 )}
                 {isSubmitting ? "Submitting..." : "Submit Complaint"}
               </button>

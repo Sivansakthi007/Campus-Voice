@@ -73,10 +73,10 @@ export default function SplashScreen() {
               transition={{ delay: 0.3 }}
               className="text-center"
             >
-              <h1 className="text-5xl font-bold bg-gradient-to-r from-blue-400 via-violet-400 to-blue-400 bg-clip-text text-transparent mb-2">
+              <h1 className="text-3xl md:text-5xl font-bold bg-gradient-to-r from-blue-400 via-violet-400 to-blue-400 bg-clip-text text-transparent mb-2">
                 CampusVoice
               </h1>
-              <p className="text-gray-400 text-sm">Smart Grievance Redressal System</p>
+              <p className="text-gray-400 text-xs md:text-sm">Smart Grievance Redressal System</p>
             </motion.div>
 
             {/* Loading Dots */}

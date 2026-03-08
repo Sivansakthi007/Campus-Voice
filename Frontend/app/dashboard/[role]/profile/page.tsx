@@ -98,12 +98,12 @@ export default function ProfilePage({ params }: { params: Promise<{ role: string
     <div className="min-h-screen bg-gradient-to-br from-[rgb(15,15,20)] via-[rgb(24,24,32)] to-[rgb(15,15,20)] flex">
       <Sidebar role={role} />
 
-      <main className="flex-1 p-8 lg:p-12">
+      <main className="flex-1 p-4 md:p-8 lg:p-12">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-4xl font-bold text-white mb-2">My Profile</h1>
-            <p className="text-gray-400">Manage your personal information</p>
+            <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-2">My Profile</h1>
+            <p className="text-gray-400 text-sm md:text-base">Manage your personal information</p>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -224,8 +224,8 @@ export default function ProfilePage({ params }: { params: Promise<{ role: string
             {/* Profile Info */}
             <div className="lg:col-span-2">
               <div className="glass-card rounded-2xl p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-2xl font-bold text-white">Personal Information</h3>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
+                  <h3 className="text-xl md:text-2xl font-bold text-white">Personal Information</h3>
                   {!isEditing ? (
                     <button
                       onClick={() => setIsEditing(true)}

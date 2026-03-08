@@ -180,6 +180,7 @@ class ApiClient {
       studentEmail: data.student_email,
       assignedTo: data.assigned_to,
       assignedToName: data.assigned_to_name,
+      assignedToAll: data.assigned_to_all || [],
       attachments: data.attachments || [],
       evidenceTags: data.evidence_tags || [],
       aiAnalysis: {

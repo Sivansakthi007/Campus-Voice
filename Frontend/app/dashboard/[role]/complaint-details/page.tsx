@@ -566,7 +566,17 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
                       <p className="text-white font-medium uppercase">{complaint.priority}</p>
                     </div>
                   </div>
-                  {complaint.assignedToName && (
+                  {complaint.assignedToAll && complaint.assignedToAll.length > 0 ? (
+                    <div className="flex items-center gap-3">
+                      <User className="w-5 h-5 text-gray-400" />
+                      <div>
+                        <p className="text-sm text-gray-400">Assigned to</p>
+                        <p className="text-white font-medium">
+                          {complaint.assignedToAll.map(s => s.name).join(", ")}
+                        </p>
+                      </div>
+                    </div>
+                  ) : complaint.assignedToName ? (
                     <div className="flex items-center gap-3">
                       <User className="w-5 h-5 text-gray-400" />
                       <div>
@@ -574,7 +584,7 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
                         <p className="text-white font-medium">{complaint.assignedToName}</p>
                       </div>
                     </div>
-                  )}
+                  ) : null}
                 </div>
               </div>
 
@@ -643,8 +653,8 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
                     }}
                     rows={4}
                     className={`w-full px-4 py-3 bg-white/5 border rounded-xl text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none transition-all ${resolutionError
-                        ? "border-red-500/70 ring-1 ring-red-500/50"
-                        : "border-white/10"
+                      ? "border-red-500/70 ring-1 ring-red-500/50"
+                      : "border-white/10"
                       }`}
                     placeholder="Describe the action taken to resolve this complaint (e.g., issue fixed, maintenance completed, explanation given)..."
                   />
@@ -673,8 +683,8 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
                   onClick={handleStatusUpdate}
                   disabled={selectedStatus === "resolved" && !resolutionDescription.trim()}
                   className={`flex-1 px-4 py-3 rounded-xl text-white font-medium transition-all ${selectedStatus === "resolved" && !resolutionDescription.trim()
-                      ? "bg-gray-600 cursor-not-allowed opacity-50"
-                      : "bg-gradient-to-r from-blue-500 to-violet-500 hover:shadow-lg"
+                    ? "bg-gray-600 cursor-not-allowed opacity-50"
+                    : "bg-gradient-to-r from-blue-500 to-violet-500 hover:shadow-lg"
                     }`}
                 >
                   Update

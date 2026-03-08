@@ -245,7 +245,7 @@ export default function RegisterPage() {
               <p className="text-white/60 text-center mb-8">Choose your role and get started</p>
 
               {!selectedRole && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
+                <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4 mb-4">
                   {ROLE_OPTIONS.map((role) => {
                     const Icon = role.icon
                     const colors = ROLE_COLORS[role.value]
@@ -255,22 +255,22 @@ export default function RegisterPage() {
                         whileHover={{ scale: 1.05, y: -4 }}
                         whileTap={{ scale: 0.98 }}
                         onClick={() => handleRoleSelect(role.value)}
-                        className={`p-5 rounded-2xl text-center border ${colors.border} hover:border-white/30 transition-all duration-300`}
+                        className={`p-4 md:p-5 rounded-2xl text-center border ${colors.border} hover:border-white/30 transition-all duration-300`}
                         style={{
                           background: "rgba(255, 255, 255, 0.06)",
                           backdropFilter: "blur(10px)",
                         }}
                       >
                         <div
-                          className={`w-14 h-14 mx-auto mb-3 rounded-2xl bg-gradient-to-br ${colors.gradient} flex items-center justify-center shadow-lg`}
+                          className={`w-12 h-12 md:w-14 md:h-14 mx-auto mb-2 md:mb-3 rounded-xl md:rounded-2xl bg-gradient-to-br ${colors.gradient} flex items-center justify-center shadow-lg`}
                         >
-                          <Icon className="w-7 h-7 text-white" />
+                          <Icon className="w-6 h-6 md:w-7 md:h-7 text-white" />
                         </div>
-                        <h3 className="text-base font-semibold text-white">{role.label}</h3>
-                        <p className="text-xs text-white/50 mt-1">{role.description}</p>
+                        <h3 className="text-sm md:text-base font-semibold text-white">{role.label}</h3>
+                        <p className="text-[10px] md:text-xs text-white/50 mt-1">{role.description}</p>
                         {PASSWORD_PROTECTED_ROLES.has(role.value) && (
-                          <div className="mt-2 flex items-center justify-center gap-1 text-xs text-amber-400/70">
-                            <Lock className="w-3 h-3" />
+                          <div className="mt-2 flex items-center justify-center gap-1 text-[10px] md:text-xs text-amber-400/70">
+                            <Lock className="w-2.5 h-2.5 md:w-3 md:h-3" />
                             <span>Password Required</span>
                           </div>
                         )}
