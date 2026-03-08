@@ -23,7 +23,7 @@ import {
 import { USER_ROLES, ROLE_COLORS, STAFF_ROLES, type UserRole } from "@/lib/constants"
 
 // Use the same backend URL as the API client for production deployments
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "https://campus-voice-backend-82u6.onrender.com";
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "https://campus-voice-backend-hhkp.onrender.com";
 
 const ROLE_OPTIONS = [
   { value: USER_ROLES.STUDENT, label: "Student", icon: GraduationCap, description: "Submit and track complaints" },
