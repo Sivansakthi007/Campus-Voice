@@ -62,10 +62,15 @@ app = FastAPI(title="Campus Voice API")
 api_router = APIRouter(prefix="/api")
 
 # Add CORS middleware - Production Ready
+_cors_env = os.environ.get("CORS_ORIGINS", "")
 ALLOWED_ORIGINS = [
     "https://campus-voice-frontend.onrender.com",  # Production frontend
     "http://localhost:3000",  # Local development
 ]
+if _cors_env == "*":
+    ALLOWED_ORIGINS = ["*"]
+elif _cors_env:
+    ALLOWED_ORIGINS.extend([o.strip() for o in _cors_env.split(",") if o.strip()])
 
 app.add_middleware(
     CORSMiddleware,
@@ -694,7 +699,8 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_se
         await session.commit()
         await session.refresh(user_obj)
     except Exception as e:
-        logger.error(f"Registration failed for {user_data.email}: {str(e)}")
+        import traceback
+        logger.error(f"Registration failed for {user_data.email}: {str(e)}\n{traceback.format_exc()}")
         await session.rollback()
         return create_response(False, "Registration failed due to a server error. Please try again.", status_code=500)
 
