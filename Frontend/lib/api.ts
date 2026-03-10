@@ -826,6 +826,33 @@ class ApiClient {
     return response.data?.unread_count || 0
   }
 
+  // ===== SMART SUGGESTION METHODS =====
+
+  async getSuggestions(sort: "latest" | "votes" = "latest"): Promise<any[]> {
+    const response = await this.request<any[]>(`/api/suggestions?sort=${sort}`)
+    return response.data || []
+  }
+
+  async createSuggestion(data: { title: string; description: string; category: string; image_url?: string }): Promise<any> {
+    const response = await this.request<any>("/api/suggestions", {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+    return response.data || response
+  }
+
+  async voteSuggestion(suggestionId: string): Promise<{ vote_count: number }> {
+    const response = await this.request<{ vote_count: number }>(`/api/suggestions/${suggestionId}/vote`, {
+      method: "POST",
+    })
+    return response.data || response
+  }
+
+  async getTopSuggestions(): Promise<any[]> {
+    const response = await this.request<any[]>("/api/suggestions/top")
+    return response.data || []
+  }
+
   // Token management
   setToken(token: string | null) {
     this.token = token

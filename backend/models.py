@@ -143,3 +143,32 @@ class Notification(Base):
     student_name = Column(String(255), nullable=True)
     is_read = Column(Boolean, default=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Suggestion(Base):
+    """Smart Suggestion created by students."""
+    __tablename__ = "suggestions"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    title = Column(String(512), nullable=False)
+    description = Column(Text, nullable=False)
+    category = Column(String(100), nullable=False)  # Campus / Lab / Library / Hostel / Other
+    image_url = Column(String(512), nullable=True)
+    student_id = Column(String(36), nullable=False, index=True)
+    student_name = Column(String(255), nullable=True)
+    vote_count = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class SuggestionVote(Base):
+    """Tracks votes on suggestions to prevent duplicates."""
+    __tablename__ = "suggestion_votes"
+    __table_args__ = (
+        UniqueConstraint('suggestion_id', 'student_id', name='uq_suggestion_student_vote'),
+    )
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    suggestion_id = Column(String(36), nullable=False, index=True)
+    student_id = Column(String(36), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+

@@ -20,6 +20,7 @@ import {
   Trophy,
   ClipboardCheck,
   AlertTriangle,
+  Lightbulb,
 } from "lucide-react"
 import { USER_ROLES, ROLE_COLORS, type UserRole } from "@/lib/constants"
 import { mockStorage } from "@/lib/mock-data"
@@ -39,6 +40,7 @@ const SIDEBAR_ITEMS = {
     { icon: Star, label: "Weekly Staff Rating", path: "/weekly-staff-rating" },
     { icon: ClipboardCheck, label: "HOD Semester Report", path: "/hod-semester-report" },
     { icon: Trophy, label: "Staff Report", path: "/staff-report" },
+    { icon: Lightbulb, label: "Smart Suggestion", path: "/smart-suggestion" },
     { icon: User, label: "Profile", path: "/profile" },
     { icon: Settings, label: "Settings", path: "/settings" },
   ],
@@ -69,6 +71,7 @@ const SIDEBAR_ITEMS = {
     { icon: BarChart3, label: "Analytics", path: "/analytics" },
     { icon: AlertTriangle, label: "Staff Grievance", path: "/staff-grievance" },
     { icon: Trophy, label: "HOD Performance", path: "/hod-performance-dashboard" },
+    { icon: Lightbulb, label: "Smart Suggestion", path: "/smart-suggestion" },
     { icon: User, label: "Profile", path: "/profile" },
     { icon: Settings, label: "Settings", path: "/settings" },
   ],

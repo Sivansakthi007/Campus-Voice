@@ -10,7 +10,7 @@ from pathlib import Path
 from sqlalchemy import select, func, text, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_engine, get_session, Base
-from models import User, Complaint, StaffRating, HODRating, HODReportToggle, Notification
+from models import User, Complaint, StaffRating, HODRating, HODReportToggle, Notification, Suggestion, SuggestionVote
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Dict, Any
 from enum import Enum
@@ -429,6 +429,26 @@ class WeeklyPerformanceReport(BaseModel):
     week_end: str
     staff_performance: List[StaffPerformanceRating]
     total_ratings: int
+
+# Suggestion Models
+class SuggestionCreate(BaseModel):
+    title: str
+    description: str
+    category: str
+    image_url: Optional[str] = None
+
+class SuggestionResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    title: str
+    description: str
+    category: str
+    image_url: Optional[str]
+    student_id: str
+    student_name: Optional[str]
+    vote_count: int
+    created_at: str
+    has_voted: bool = False
 
 # ===== HELPER FUNCTIONS =====
 def create_response(success: bool, message: str, data: Any = None, status_code: int = 200) -> JSONResponse:
@@ -3278,6 +3298,139 @@ async def delete_resolved_complaints(
     await session.commit()
 
     return create_response(True, f"Successfully deleted {count} resolved complaints", {"deleted_count": count})
+
+
+# ===== SMART SUGGESTION ENDPOINTS =====
+
+@api_router.post("/suggestions", response_model=SuggestionResponse, status_code=201)
+async def create_suggestion(
+    data: SuggestionCreate,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    if current_user["role"] != UserRole.STUDENT:
+        raise HTTPException(status_code=403, detail="Only students can create suggestions")
+    
+    suggestion = Suggestion(
+        title=data.title,
+        description=data.description,
+        category=data.category,
+        image_url=data.image_url,
+        student_id=current_user["id"],
+        student_name=current_user["name"]
+    )
+    session.add(suggestion)
+    await session.commit()
+    await session.refresh(suggestion)
+    
+    return SuggestionResponse(
+        id=suggestion.id,
+        title=suggestion.title,
+        description=suggestion.description,
+        category=suggestion.category,
+        image_url=suggestion.image_url,
+        student_id=suggestion.student_id,
+        student_name=suggestion.student_name,
+        vote_count=suggestion.vote_count,
+        created_at=suggestion.created_at.isoformat(),
+        has_voted=False
+    )
+
+@api_router.get("/suggestions")
+async def get_suggestions(
+    sort: Optional[str] = "latest",
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    stmt = select(Suggestion)
+    if sort == "votes":
+        stmt = stmt.order_by(Suggestion.vote_count.desc(), Suggestion.created_at.desc())
+    else:
+        stmt = stmt.order_by(Suggestion.created_at.desc())
+    
+    res = await session.execute(stmt)
+    suggestions = res.scalars().all()
+    
+    # Check if current user has voted for each
+    voted_ids = set()
+    if current_user:
+        voted_stmt = select(SuggestionVote.suggestion_id).where(SuggestionVote.student_id == current_user["id"])
+        voted_res = await session.execute(voted_stmt)
+        voted_ids = set(voted_res.scalars().all())
+    
+    result = []
+    for s in suggestions:
+        result.append({
+            "id": s.id,
+            "title": s.title,
+            "description": s.description,
+            "category": s.category,
+            "image_url": s.image_url,
+            "student_id": s.student_id,
+            "student_name": s.student_name,
+            "vote_count": s.vote_count,
+            "created_at": s.created_at.isoformat(),
+            "has_voted": s.id in voted_ids
+        })
+    
+    return create_response(True, "Suggestions retrieved successfully", result)
+
+@api_router.post("/suggestions/{suggestion_id}/vote")
+async def vote_suggestion(
+    suggestion_id: str,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    if current_user["role"] != UserRole.STUDENT:
+        return create_response(False, "Only students can vote", status_code=403)
+    
+    # Check if already voted
+    stmt = select(SuggestionVote).where(
+        SuggestionVote.suggestion_id == suggestion_id,
+        SuggestionVote.student_id == current_user["id"]
+    )
+    res = await session.execute(stmt)
+    if res.scalars().first():
+        return create_response(False, "You have already voted for this suggestion", status_code=400)
+    
+    suggestion = await session.get(Suggestion, suggestion_id)
+    if not suggestion:
+        return create_response(False, "Suggestion not found", status_code=404)
+    
+    # Record vote
+    vote = SuggestionVote(suggestion_id=suggestion_id, student_id=current_user["id"])
+    session.add(vote)
+    
+    # Increment count
+    suggestion.vote_count += 1
+    
+    await session.commit()
+    return create_response(True, "Vote recorded successfully", {"vote_count": suggestion.vote_count})
+
+@api_router.get("/suggestions/top")
+async def get_top_suggestions(
+    session: AsyncSession = Depends(get_session),
+    current_user: dict = Depends(get_current_user)
+):
+    stmt = select(Suggestion).order_by(Suggestion.vote_count.desc()).limit(10)
+    res = await session.execute(stmt)
+    suggestions = res.scalars().all()
+    
+    result = []
+    for s in suggestions:
+        result.append({
+            "id": s.id,
+            "title": s.title,
+            "description": s.description,
+            "category": s.category,
+            "image_url": s.image_url,
+            "student_id": s.student_id,
+            "student_name": s.student_name,
+            "vote_count": s.vote_count,
+            "created_at": s.created_at.isoformat()
+        })
+    
+    return create_response(True, "Top suggestions retrieved successfully", result)
 
 
 # ===== NOTIFICATION ENDPOINTS =====
