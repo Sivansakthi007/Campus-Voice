@@ -80,10 +80,114 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
 )
 
+async def auto_escalation_worker():
+    """Background task that checks for complaints that need automatic escalation."""
+    import asyncio
+    from sqlalchemy import select, func
+    from datetime import datetime, timezone, timedelta
+    
+    while True:
+        try:
+            logger.info("Running automatic escalation check...")
+            # We need a new session for each run to avoid stale data and handle concurrency
+            from db import get_engine, get_session
+            from sqlalchemy.ext.asyncio import AsyncSession
+            from sqlalchemy.orm import sessionmaker
+            
+            engine = get_engine()
+            async_session_factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+            
+            async with async_session_factory() as session:
+                now = datetime.now(timezone.utc)
+                
+                # Find pending/in_progress complaints below Level 3
+                stmt = select(Complaint).where(
+                    Complaint.status.notin_([ComplaintStatus.RESOLVED, ComplaintStatus.REJECTED]),
+                    Complaint.escalation_level < 3
+                )
+                res = await session.execute(stmt)
+                complaints = res.scalars().all()
+                
+                for comp in complaints:
+                    last_active = comp.last_escalation_at or comp.created_at
+                    if last_active.tzinfo is None:
+                        last_active = last_active.replace(tzinfo=timezone.utc)
+                        
+                    age_days = (now - last_active).days
+                    
+                    should_escalate = False
+                    target_role = None
+                    
+                    if comp.escalation_level == 0 and age_days >= 3:
+                        should_escalate = True
+                        target_role = UserRole.HOD
+                    elif comp.escalation_level == 1 and age_days >= 7:
+                        should_escalate = True
+                        target_role = UserRole.PRINCIPAL
+                    elif comp.escalation_level == 2 and age_days >= 30:
+                        should_escalate = True
+                        target_role = UserRole.ADMIN
+                        
+                    if should_escalate:
+                        logger.info(f"Auto-escalating complaint {comp.id} to level {comp.escalation_level + 1}")
+                        comp.escalation_level += 1
+                        comp.last_escalation_at = now
+                        comp.priority = PriorityLevel.HIGH
+                        comp.status = ComplaintStatus.REVIEWED
+                        
+                        # Find target authority
+                        target_user = None
+                        if target_role == UserRole.HOD:
+                            t_stmt = select(User).where(User.role == UserRole.HOD, User.department == comp.student_department)
+                            target_user = (await session.execute(t_stmt)).scalars().first()
+                        elif target_role == UserRole.PRINCIPAL:
+                            t_stmt = select(User).where(User.role == UserRole.PRINCIPAL)
+                            target_user = (await session.execute(t_stmt)).scalars().first()
+                        elif target_role == UserRole.ADMIN:
+                            t_stmt = select(User).where(User.role == UserRole.ADMIN)
+                            target_user = (await session.execute(t_stmt)).scalars().first()
+                        
+                        if target_user:
+                            comp.assigned_to = target_user.id
+                            comp.assigned_to_name = target_user.name
+                            comp.assigned_to_all = [{"id": target_user.id, "name": target_user.name}]
+                            comp.assigned_at = now
+                        
+                        timeline = comp.timeline or []
+                        timeline.append({
+                            "status": "auto_escalated",
+                            "timestamp": now.isoformat(),
+                            "note": f"System auto-escalated to {target_role.upper() if target_role else 'Next Authority'} due to inactivity ({age_days} days)",
+                            "level": comp.escalation_level
+                        })
+                        comp.timeline = timeline
+                        
+                        if target_user:
+                            notif = Notification(
+                                user_id=target_user.id,
+                                complaint_id=comp.id,
+                                title=f"AUTO-ESCALATED: {comp.title}",
+                                message=f"Complaint has been auto-escalated to you due to inactivity. Level: {comp.escalation_level}",
+                                category=comp.category,
+                                student_name=comp.student_name if not comp.is_anonymous else "Anonymous",
+                            )
+                            session.add(notif)
+                
+                await session.commit()
+            
+        except Exception as e:
+            logger.error(f"Error in auto_escalation_worker: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            
+        # Run every 24 hours
+        await asyncio.sleep(86400)
+
 @app.on_event("startup")
 async def startup():
     """Initialize database connection with retry logic for containerized environments."""
     import asyncio
+    # ... existing startup code ...
     
     max_retries = 5
     retry_delay = 2  # Start with 2 seconds
@@ -175,6 +279,32 @@ async def startup():
                         logger.info("Migration: 'assigned_to_all' column already exists")
             except Exception as migration_err:
                 logger.warning(f"Migration check for assigned_to_all column: {str(migration_err)}")
+
+            # Safe migration: add escalation columns to complaints if they don't exist
+            try:
+                async with engine.begin() as conn:
+                    # escalation_level
+                    result = await conn.execute(text(
+                        "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
+                        "WHERE TABLE_NAME = 'complaints' AND COLUMN_NAME = 'escalation_level'"
+                    ))
+                    if result.fetchone() is None:
+                        await conn.execute(text(
+                            "ALTER TABLE complaints ADD COLUMN escalation_level INTEGER DEFAULT 0"
+                        ))
+                    
+                    # last_escalation_at
+                    result = await conn.execute(text(
+                        "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
+                        "WHERE TABLE_NAME = 'complaints' AND COLUMN_NAME = 'last_escalation_at'"
+                    ))
+                    if result.fetchone() is None:
+                        await conn.execute(text(
+                            "ALTER TABLE complaints ADD COLUMN last_escalation_at DATETIME NULL"
+                        ))
+                    logger.info("Migration: Escalation columns verified/added")
+            except Exception as migration_err:
+                logger.warning(f"Migration check for escalation columns: {str(migration_err)}")
             
             logger.info("Database connection established successfully!")
             return
@@ -187,6 +317,10 @@ async def startup():
             else:
                 logger.error("All database connection attempts failed!")
                 raise
+    
+    # Start auto-escalation worker
+    import asyncio
+    asyncio.create_task(auto_escalation_worker())
 @app.get("/")
 async def root():
     return {"message": "Campus Voice API is running", "docs_url": "/docs"}
@@ -377,6 +511,7 @@ class ComplaintResponse(BaseModel):
     timeline: List[Dict[str, Any]]
     anonymous_label: Optional[str] = None
     resolution_description: Optional[str] = None
+    escalation_level: int = 0
 
 class ComplaintUpdate(BaseModel):
     status: Optional[str] = None
@@ -510,6 +645,7 @@ def filter_complaint_identity(comp: Complaint, user: dict):
         "timeline": comp.timeline,
         "anonymous_label": None,
         "resolution_description": comp.resolution_description,
+        "escalation_level": comp.escalation_level or 0,
     }
 
     if comp.is_anonymous:
@@ -1403,6 +1539,124 @@ async def update_complaint(complaint_id: str, update_data: ComplaintUpdate, curr
     logger.info(f"Complaint {complaint_id} updated successfully")
 
     return create_response(True, "Complaint updated successfully", filter_complaint_identity(complaint_obj, current_user))
+    
+@api_router.post("/complaints/{complaint_id}/escalate")
+async def escalate_complaint(complaint_id: str, current_user: dict = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    """
+    Manually escalate a complaint to the next authority.
+    - Staff (Institutional) -> Principal
+    - Staff (Departmental) -> HOD
+    - HOD -> Principal
+    """
+    complaint_obj = await session.get(Complaint, complaint_id)
+    if not complaint_obj:
+        return create_response(False, "Complaint not found", status_code=404)
+
+    # Permission check: Only the assigned staff or HOD (for dept complaints) can escalate
+    is_assigned = complaint_obj.assigned_to == current_user["id"]
+    is_privileged = current_user["role"] in [UserRole.ADMIN, UserRole.PRINCIPAL]
+    
+    # HOD can escalate if it's their department
+    is_dept_hod = current_user["role"] == UserRole.HOD and current_user.get("department") == complaint_obj.student_department
+
+    if not (is_assigned or is_dept_hod or is_privileged):
+         return create_response(False, "You do not have permission to escalate this complaint", status_code=403)
+
+    # Escalation Logic
+    old_level = complaint_obj.escalation_level or 0
+    new_level = old_level + 1
+    new_priority = PriorityLevel.HIGH
+    
+    escalated_to_role = None
+    target_user_id = None
+    target_user_name = None
+
+    if current_user["role"] == UserRole.STAFF:
+        is_institutional = current_user.get("staff_role") in INSTITUTIONAL_STAFF_ROLES
+        if is_institutional:
+            # Institutional Staff -> Principal (Level 2)
+            new_level = 2
+            escalated_to_role = UserRole.PRINCIPAL
+        else:
+            # Departmental Staff -> HOD (Level 1)
+            new_level = 1
+            escalated_to_role = UserRole.HOD
+    elif current_user["role"] == UserRole.HOD:
+        # HOD -> Principal (Level 2)
+        new_level = 2
+        escalated_to_role = UserRole.PRINCIPAL
+    else:
+        # Admin/Principal manually incrementing
+        new_level = old_level + 1
+        if new_level == 1: escalated_to_role = UserRole.HOD
+        elif new_level == 2: escalated_to_role = UserRole.PRINCIPAL
+        else: escalated_to_role = UserRole.ADMIN
+
+    # Find target authority if applicable
+    if escalated_to_role == UserRole.HOD:
+        hod_stmt = select(User).where(User.role == UserRole.HOD, User.department == complaint_obj.student_department)
+        target_res = await session.execute(hod_stmt)
+        target_user = target_res.scalars().first()
+        if target_user:
+            target_user_id = target_user.id
+            target_user_name = target_user.name
+    elif escalated_to_role == UserRole.PRINCIPAL:
+        princ_stmt = select(User).where(User.role == UserRole.PRINCIPAL)
+        target_res = await session.execute(princ_stmt)
+        target_user = target_res.scalars().first()
+        if target_user:
+            target_user_id = target_user.id
+            target_user_name = target_user.name
+    elif escalated_to_role == UserRole.ADMIN:
+        admin_stmt = select(User).where(User.role == UserRole.ADMIN)
+        target_res = await session.execute(admin_stmt)
+        target_user = target_res.scalars().first()
+        if target_user:
+            target_user_id = target_user.id
+            target_user_name = target_user.name
+
+    # Update Complaint
+    complaint_obj.escalation_level = new_level
+    complaint_obj.last_escalation_at = datetime.now(timezone.utc)
+    complaint_obj.priority = new_priority
+    complaint_obj.status = ComplaintStatus.REVIEWED # Mark as reviewed by next level
+    
+    if target_user_id:
+        complaint_obj.assigned_to = target_user_id
+        complaint_obj.assigned_to_name = target_user_name
+        complaint_obj.assigned_to_all = [{"id": target_user_id, "name": target_user_name}]
+        complaint_obj.assigned_at = datetime.now(timezone.utc)
+
+    # Update Timeline
+    timeline = complaint_obj.timeline or []
+    target_role_display = escalated_to_role.upper() if escalated_to_role else f"Level {new_level}"
+    timeline.append({
+        "status": "escalated",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "note": f"Complaint escalated to {target_role_display} ({target_user_name or 'Higher Authority'})",
+        "updated_by": current_user["name"],
+        "level": new_level
+    })
+    complaint_obj.timeline = timeline
+
+    session.add(complaint_obj)
+    
+    # Notify next authority
+    if target_user_id:
+        notif = Notification(
+            user_id=target_user_id,
+            complaint_id=complaint_obj.id,
+            title=f"URGENT: Escalated Complaint - {complaint_obj.title}",
+            message=f"A complaint has been escalated to you by {current_user['name']}. Level: {new_level}",
+            category=complaint_obj.category,
+            student_name=complaint_obj.student_name if not complaint_obj.is_anonymous else "Anonymous",
+        )
+        session.add(notif)
+
+    await session.commit()
+    await session.refresh(complaint_obj)
+
+    return create_response(True, f"Complaint escalated to {target_role_display}", filter_complaint_identity(complaint_obj, current_user))
 
 @api_router.get("/complaints/{complaint_id}/eligible-staff")
 async def get_eligible_staff(complaint_id: str, current_user: dict = Depends(get_current_user), session: AsyncSession = Depends(get_session)):

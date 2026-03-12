@@ -50,6 +50,8 @@ class Complaint(Base):
     assigned_to_all = Column(JSON, default=list)
     assigned_at = Column(DateTime(timezone=True), nullable=True)
     resolution_description = Column(Text, nullable=True)
+    escalation_level = Column(Integer, default=0)
+    last_escalation_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

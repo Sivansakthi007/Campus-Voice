@@ -175,9 +175,11 @@ class ApiClient {
       priority: data.priority,
       status: data.status,
       isAnonymous: data.is_anonymous,
+      escalationLevel: data.escalation_level || 0,
       studentId: data.student_id,
       studentName: data.student_name,
       studentEmail: data.student_email,
+      studentDepartment: data.student_department,
       assignedTo: data.assigned_to,
       assignedToName: data.assigned_to_name,
       assignedToAll: data.assigned_to_all || [],
@@ -256,6 +258,14 @@ class ApiClient {
     const response = await this.request<any>(`/api/complaints/${id}`, {
       method: "PUT",
       body: JSON.stringify(updateData),
+    })
+    const data = response.data || response
+    return this.transformComplaint(data)
+  }
+
+  async escalateComplaint(id: string): Promise<Complaint> {
+    const response = await this.request<any>(`/api/complaints/${id}/escalate`, {
+      method: "POST",
     })
     const data = response.data || response
     return this.transformComplaint(data)

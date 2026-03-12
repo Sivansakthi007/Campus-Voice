@@ -39,6 +39,7 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [showRemarkModal, setShowRemarkModal] = useState(false)
   const [showAssignModal, setShowAssignModal] = useState(false)
+  const [showEscalateModal, setShowEscalateModal] = useState(false)
 
   const [selectedStatus, setSelectedStatus] = useState<string>("")
   const [resolutionDescription, setResolutionDescription] = useState("")
@@ -185,7 +186,15 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
 
   const handleEscalate = async () => {
     if (!complaint) return
-    toast.info("Escalation requires administrative approval (Backend update pending)")
+    try {
+      const updated = await apiClient.escalateComplaint(complaint.id)
+      setComplaint(updated)
+      toast.success("Complaint escalated successfully")
+      setShowEscalateModal(false)
+    } catch (error: any) {
+      console.error("Failed to escalate complaint:", error)
+      toast.error(error?.message || "Failed to escalate complaint")
+    }
   }
 
   const handleAcceptReject = async (action: "accept" | "reject") => {
@@ -272,7 +281,17 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
   const canUpdateStatus = role === USER_ROLES.STAFF
   const canAcceptReject = role === USER_ROLES.PRINCIPAL || role === USER_ROLES.ADMIN
   const canAssignStaff = role === USER_ROLES.HOD || role === USER_ROLES.PRINCIPAL || role === USER_ROLES.ADMIN
-  const canEscalate = role === USER_ROLES.STAFF
+  
+  // Can escalate if:
+  // 1. User is the assigned staff (Level 0)
+  // 2. User is HOD and it's their department (Level 1)
+  // 3. User is Admin/Principal (Forced escalation)
+  const isAssigned = complaint?.assignedTo === currentUser?.id
+  const isHodAuthority = role === USER_ROLES.HOD && currentUser?.department === complaint?.studentDepartment
+  const canEscalate = (isAssigned || isHodAuthority || role === USER_ROLES.PRINCIPAL || role === USER_ROLES.ADMIN) && 
+                     complaint?.status !== COMPLAINT_STATUS.RESOLVED && 
+                     complaint?.status !== COMPLAINT_STATUS.REJECTED &&
+                     (complaint?.escalationLevel || 0) < 3
 
   // HOD can reassign Academic Issues / Staff Behavior complaints even if already assigned
   const isHodCategory = complaint ? HOD_REASSIGN_CATEGORIES.includes(complaint.category) : false
@@ -323,7 +342,7 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
                 )}
                 {canEscalate && (
                   <button
-                    onClick={handleEscalate}
+                    onClick={() => setShowEscalateModal(true)}
                     className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-xl hover:shadow-lg transition-all"
                   >
                     <AlertTriangle className="w-4 h-4" />
@@ -566,6 +585,17 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
                       <p className="text-white font-medium uppercase">{complaint.priority}</p>
                     </div>
                   </div>
+                  <div className="flex items-center gap-3">
+                    <AlertTriangle className="w-5 h-5 text-orange-400" />
+                    <div>
+                      <p className="text-sm text-gray-400">Escalation Level</p>
+                      <p className="text-white font-medium">
+                        {(complaint as any).escalationLevel === 0 ? "Staff Level" :
+                         (complaint as any).escalationLevel === 1 ? "HOD Level" :
+                         (complaint as any).escalationLevel === 2 ? "Principal Level" : "Admin Level"}
+                      </p>
+                    </div>
+                  </div>
                   {complaint.assignedToAll && complaint.assignedToAll.length > 0 ? (
                     <div className="flex items-center gap-3">
                       <User className="w-5 h-5 text-gray-400" />
@@ -764,6 +794,40 @@ export default function ComplaintDetailsPage({ params }: { params: Promise<{ rol
                   className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-violet-500 text-white rounded-xl hover:shadow-lg transition-all"
                 >
                   Assign
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Escalate Confirmation Modal */}
+        {showEscalateModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="glass-card rounded-2xl p-6 max-w-md w-full"
+            >
+              <div className="w-16 h-16 rounded-full bg-orange-500/20 flex items-center justify-center mb-6 mx-auto">
+                <AlertTriangle className="w-8 h-8 text-orange-500" />
+              </div>
+              <h3 className="text-2xl font-bold text-white mb-2 text-center">Confirm Escalation</h3>
+              <p className="text-gray-400 text-center mb-6">
+                This complaint will be escalated to the next higher authority. 
+                This action cannot be undone. Do you want to continue?
+              </p>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setShowEscalateModal(false)}
+                  className="flex-1 px-4 py-3 glass-card text-white rounded-xl hover:bg-white/10 transition-all font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleEscalate}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-xl hover:shadow-lg transition-all font-medium"
+                >
+                  Confirm Escalate
                 </button>
               </div>
             </motion.div>

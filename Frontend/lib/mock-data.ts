@@ -20,9 +20,11 @@ export interface Complaint {
   priority: PriorityLevel
   status: ComplaintStatus
   isAnonymous: boolean
+  escalationLevel: number
   studentId: string
   studentName?: string
   studentEmail?: string
+  studentDepartment?: string
   assignedTo?: string
   assignedToName?: string
   assignedToAll?: Array<{ id: string; name: string }>
