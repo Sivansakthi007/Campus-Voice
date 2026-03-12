@@ -36,7 +36,6 @@ const SIDEBAR_ITEMS = {
     { icon: LayoutDashboard, label: "Dashboard", path: "" },
     { icon: FileText, label: "Submit Complaint", path: "/submit" },
     { icon: List, label: "My Complaints", path: "/complaints" },
-    { icon: FileSearch, label: "Complaint Details", path: "/complaint-details" },
     { icon: Star, label: "Weekly Staff Rating", path: "/weekly-staff-rating" },
     { icon: ClipboardCheck, label: "HOD Semester Report", path: "/hod-semester-report" },
     { icon: Trophy, label: "Staff Report", path: "/staff-report" },
@@ -47,7 +46,6 @@ const SIDEBAR_ITEMS = {
   [USER_ROLES.STAFF]: [
     { icon: LayoutDashboard, label: "Dashboard", path: "" },
     { icon: List, label: "Assigned Complaints", path: "/complaints" },
-    { icon: FileSearch, label: "Complaint Details", path: "/complaint-details" },
     { icon: BarChart3, label: "My Performance", path: "/performance" },
     { icon: ClipboardCheck, label: "HOD Semester Report", path: "/hod-semester-report" },
     { icon: User, label: "Profile", path: "/profile" },
@@ -56,7 +54,6 @@ const SIDEBAR_ITEMS = {
   [USER_ROLES.HOD]: [
     { icon: LayoutDashboard, label: "Dashboard", path: "" },
     { icon: List, label: "All Complaints", path: "/complaints" },
-    { icon: FileSearch, label: "Complaint Details", path: "/complaint-details" },
     { icon: Users, label: "Staff Management", path: "/staff" },
     { icon: Trophy, label: "Staff Performance", path: "/staff-performance-report" },
     { icon: BarChart3, label: "Analytics", path: "/analytics" },
@@ -66,7 +63,6 @@ const SIDEBAR_ITEMS = {
   [USER_ROLES.PRINCIPAL]: [
     { icon: LayoutDashboard, label: "Dashboard", path: "" },
     { icon: List, label: "All Complaints", path: "/complaints" },
-    { icon: FileSearch, label: "Complaint Details", path: "/complaint-details" },
     { icon: Users, label: "Staff Management", path: "/staff" },
     { icon: BarChart3, label: "Analytics", path: "/analytics" },
     { icon: AlertTriangle, label: "Staff Grievance", path: "/staff-grievance" },
@@ -78,7 +74,6 @@ const SIDEBAR_ITEMS = {
   [USER_ROLES.ADMIN]: [
     { icon: LayoutDashboard, label: "Dashboard", path: "" },
     { icon: List, label: "All Complaints", path: "/complaints" },
-    { icon: FileSearch, label: "Complaint Details", path: "/complaint-details" },
     { icon: Users, label: "User Management", path: "/users" },
     { icon: BarChart3, label: "Analytics", path: "/analytics" },
     { icon: User, label: "Profile", path: "/profile" },
