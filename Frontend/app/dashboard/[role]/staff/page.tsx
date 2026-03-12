@@ -11,6 +11,17 @@ import { Search, Filter, Award, Mail, Phone, Loader2, Users, X } from "lucide-re
 import { apiClient } from "@/lib/api"
 import { STAFF_ROLES } from "@/lib/constants"
 
+// Roles where the Department field is not required (Institutional Level)
+const INSTITUTIONAL_STAFF_ROLES = new Set([
+  "Librarian",
+  "Physical Director",
+  "Exam Cell Coordinator",
+  "Accountant",
+  "Transport Manager",
+  "Placement & Training Coordinator",
+  "Warden",
+]);
+
 interface StaffMember {
   id: string
   name: string
@@ -60,12 +71,14 @@ export default function StaffManagementPage({ params }: { params: Promise<{ role
         // Combine user data with performance data
         const combinedStaff: StaffMember[] = staffUsers.map((user: any) => {
           const perf = performanceData[user.id] || {}
+          const isInstitutional = INSTITUTIONAL_STAFF_ROLES.has(user.staff_role)
+          
           return {
             id: user.id,
             name: user.name,
             email: user.email,
             phone: user.phone || "",
-            department: user.department || "Not Assigned",
+            department: user.department || (isInstitutional ? "Institution Level" : "Not Assigned"),
             assignedComplaints: perf.total_complaints || 0,
             resolvedComplaints: perf.resolved_complaints || 0,
             avgResolutionTime: perf.avg_resolution_time || "N/A",

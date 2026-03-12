@@ -41,6 +41,17 @@ const PASSWORD_PROTECTED_ROLES: Set<string> = new Set([
   USER_ROLES.ADMIN,
 ])
 
+// Roles where the Department field must be removed because they operate at the institution level.
+const INSTITUTIONAL_STAFF_ROLES = new Set([
+  "Librarian",
+  "Physical Director",
+  "Exam Cell Coordinator",
+  "Accountant",
+  "Transport Manager",
+  "Placement & Training Coordinator",
+  "Warden",
+]);
+
 export default function RegisterPage() {
   const router = useRouter()
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null)
@@ -144,6 +155,8 @@ export default function RegisterPage() {
       return
     }
 
+    const isInstitutionalRole = selectedRole === USER_ROLES.STAFF && INSTITUTIONAL_STAFF_ROLES.has(formData.staffRole);
+
     try {
       const response = await fetch(`${BACKEND_URL}/api/auth/register`, {
         method: "POST",
@@ -155,7 +168,8 @@ export default function RegisterPage() {
           email: formData.email,
           password: formData.password,
           role: selectedRole,
-          department: (selectedRole === USER_ROLES.PRINCIPAL || selectedRole === USER_ROLES.ADMIN) ? undefined : formData.department,
+          // Hide department for Principal, Admin, and Internal Staff Roles
+          department: (selectedRole === USER_ROLES.PRINCIPAL || selectedRole === USER_ROLES.ADMIN || isInstitutionalRole) ? undefined : formData.department,
           // Send as student_id for students, staff_id for other roles
           ...(selectedRole === USER_ROLES.STUDENT
             ? { student_id: formData.idNumber }
@@ -305,7 +319,9 @@ export default function RegisterPage() {
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   />
 
-                  {selectedRole !== USER_ROLES.PRINCIPAL && selectedRole !== USER_ROLES.ADMIN && (
+                  {selectedRole !== USER_ROLES.PRINCIPAL && 
+                   selectedRole !== USER_ROLES.ADMIN && 
+                   !(selectedRole === USER_ROLES.STAFF && INSTITUTIONAL_STAFF_ROLES.has(formData.staffRole)) && (
                     <input
                       placeholder="Department"
                       required

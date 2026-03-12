@@ -14,7 +14,7 @@ import { toast } from "sonner"
 import { useThemeToggle } from "@/hooks/use-theme-toggle"
 
 
-export default function SettingsPage({ params }: { params: { role: string } }) {
+export default function SettingsPage({ params }: { params: Promise<{ role: string }> }) {
   const { role } = React.use(params) as { role: UserRole }
   const router = useRouter()
   const { isDarkMode, toggleTheme, mounted } = useThemeToggle()

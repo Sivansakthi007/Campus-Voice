@@ -244,6 +244,17 @@ class StaffRole(str):
     WARDEN = "Warden"
     INFRASTRUCTURE_COORDINATOR = "Infrastructure Coordinator"
 
+# Roles where the Department field must be removed because they operate at the institution level.
+INSTITUTIONAL_STAFF_ROLES = {
+    StaffRole.LIBRARIAN,
+    StaffRole.PHYSICAL_DIRECTOR,
+    StaffRole.EXAM_CELL_COORDINATOR,
+    StaffRole.ACCOUNTANT,
+    StaffRole.TRANSPORT_MANAGER,
+    StaffRole.PLACEMENT_TRAINING_COORDINATOR,
+    StaffRole.WARDEN,
+}
+
 # Categories that MUST be assigned ONLY to the HOD of the student's department
 # Manual override is blocked for these categories
 HOD_CATEGORIES = {"Academic Issues", "Staff Behavior"}
@@ -541,14 +552,17 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         user = await session.get(User, user_id)
         if user is None:
             raise HTTPException(status_code=401, detail="User not found")
+            
         # Compute student_id/staff_id based on role
         is_student = user.role == UserRole.STUDENT
+        is_institutional = user.staff_role in INSTITUTIONAL_STAFF_ROLES
+        
         return {
             "id": user.id,
             "email": user.email,
             "name": user.name,
             "role": user.role,
-            "department": None if user.role in (UserRole.PRINCIPAL, UserRole.ADMIN) else user.department,
+            "department": None if user.role in (UserRole.PRINCIPAL, UserRole.ADMIN) or is_institutional else user.department,
             "student_id": user.student_id if is_student else None,
             "staff_id": user.staff_id if not is_student else None,
             "staff_role": user.staff_role,
@@ -729,8 +743,13 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_se
     # Create user - store ID in student_id column based on role
     is_student = user_data.role == UserRole.STUDENT
     stored_id = user_data.student_id if is_student else user_data.staff_id
-    # Principal and Admin roles should not have a department
-    effective_department = None if user_data.role in (UserRole.PRINCIPAL, UserRole.ADMIN) else user_data.department
+    
+    # Identify institutional roles
+    is_institutional = user_data.role == UserRole.STAFF and user_data.staff_role in INSTITUTIONAL_STAFF_ROLES
+    
+    # Principal, Admin, and Institutional staff roles should not have a department
+    effective_department = None if (user_data.role in (UserRole.PRINCIPAL, UserRole.ADMIN) or is_institutional) else user_data.department
+    
     try:
         user_obj = User(
             email=user_data.email,
@@ -761,7 +780,7 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_se
         email=user_obj.email,
         name=user_obj.name,
         role=user_obj.role,
-        department=None if user_obj.role in (UserRole.PRINCIPAL, UserRole.ADMIN) else user_obj.department,
+        department=None if (user_obj.role in (UserRole.PRINCIPAL, UserRole.ADMIN) or user_obj.staff_role in INSTITUTIONAL_STAFF_ROLES) else user_obj.department,
         student_id=user_obj.student_id if is_student_role else None,
         staff_id=user_obj.staff_id if not is_student_role else None,
         staff_role=user_obj.staff_role,
@@ -792,7 +811,7 @@ async def login(credentials: UserLogin, session: AsyncSession = Depends(get_sess
         email=user_obj.email,
         name=user_obj.name,
         role=user_obj.role,
-        department=None if user_obj.role in (UserRole.PRINCIPAL, UserRole.ADMIN) else user_obj.department,
+        department=None if (user_obj.role in (UserRole.PRINCIPAL, UserRole.ADMIN) or user_obj.staff_role in INSTITUTIONAL_STAFF_ROLES) else user_obj.department,
         student_id=user_obj.student_id if is_student_role else None,
         staff_id=user_obj.staff_id if not is_student_role else None,
         staff_role=user_obj.staff_role,
@@ -835,7 +854,7 @@ async def list_users(
             "email": u.email,
             "name": u.name,
             "role": u.role,
-            "department": None if u.role in (UserRole.PRINCIPAL, UserRole.ADMIN) else u.department,
+            "department": None if (u.role in (UserRole.PRINCIPAL, UserRole.ADMIN) or u.staff_role in INSTITUTIONAL_STAFF_ROLES) else u.department,
             "student_id": u.student_id if is_student else None,
             "staff_id": u.staff_id if not is_student else None,
             "staff_role": u.staff_role,

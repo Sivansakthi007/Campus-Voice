@@ -381,7 +381,7 @@ def main():
         "test_details": tester.test_results
     }
     
-    with open('/app/test_reports/backend_test_results.json', 'w') as f:
+    with open('backend_test_results.json', 'w') as f:
         json.dump(results, f, indent=2)
     
     return 0 if success else 1

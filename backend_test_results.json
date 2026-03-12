@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-03-12T20:17:31.808973",
+  "total_tests": 1,
+  "passed_tests": 0,
+  "success_rate": 0.0,
+  "test_details": [
+    {
+      "test": "User Registration",
+      "success": false,
+      "details": "Exception: HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /api/auth/register (Caused by NewConnectionError(\"HTTPConnection(host='localhost', port=8000): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it\"))"
+    }
+  ]
+}
