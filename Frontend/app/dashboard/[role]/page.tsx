@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { FileText, CheckCircle, Clock, AlertCircle, TrendingUp } from "lucide-react"
 import { Sidebar } from "@/components/layout/sidebar"
+import { Chatbot } from "@/components/chatbot"
 import { USER_ROLES, type UserRole, COMPLAINT_STATUS } from "@/lib/constants"
 import { mockStorage, type Complaint } from "@/lib/mock-data"
 import { apiClient } from "@/lib/api"
@@ -166,6 +167,9 @@ export default function DashboardPage({ params }: { params: Promise<{ role: stri
           </motion.div>
         </motion.div>
       </main>
+
+      {/* Floating Chatbot */}
+      <Chatbot role={role} />
     </div>
   )
 }
