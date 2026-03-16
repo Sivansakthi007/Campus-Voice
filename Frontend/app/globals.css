@@ -362,3 +362,116 @@
 .light .min-h-screen[class*="bg-gradient"] {
   background: linear-gradient(135deg, #FFFFFF 0%, #EEF2FF 50%, #F5F3FF 100%) !important;
 }
+
+/* ===== 3D FLOATING SHAPE ANIMATIONS ===== */
+
+.floating-3d-shape {
+  animation: float-drift 10s ease-in-out infinite;
+}
+
+/* Float + drift animation */
+@keyframes float-drift {
+  0%, 100% {
+    transform: translateY(0px) translateX(0px);
+  }
+  25% {
+    transform: translateY(-20px) translateX(8px);
+  }
+  50% {
+    transform: translateY(-35px) translateX(-5px);
+  }
+  75% {
+    transform: translateY(-15px) translateX(12px);
+  }
+}
+
+/* Float + 3D rotate */
+.animate-float-rotate {
+  animation: float-rotate 12s ease-in-out infinite;
+}
+
+@keyframes float-rotate {
+  0% {
+    transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg) translateY(0px);
+  }
+  25% {
+    transform: rotateX(15deg) rotateY(90deg) rotateZ(10deg) translateY(-15px);
+  }
+  50% {
+    transform: rotateX(-10deg) rotateY(180deg) rotateZ(-5deg) translateY(-25px);
+  }
+  75% {
+    transform: rotateX(20deg) rotateY(270deg) rotateZ(15deg) translateY(-10px);
+  }
+  100% {
+    transform: rotateX(0deg) rotateY(360deg) rotateZ(0deg) translateY(0px);
+  }
+}
+
+/* Orbit animation for rings */
+.animate-orbit {
+  animation: orbit 15s linear infinite;
+}
+
+@keyframes orbit {
+  0% {
+    transform: rotate(0deg) scale(1);
+    opacity: 0.7;
+  }
+  25% {
+    transform: rotate(90deg) scale(1.1) rotateX(30deg);
+    opacity: 1;
+  }
+  50% {
+    transform: rotate(180deg) scale(1) rotateX(60deg);
+    opacity: 0.6;
+  }
+  75% {
+    transform: rotate(270deg) scale(1.15) rotateX(30deg);
+    opacity: 0.9;
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+    opacity: 0.7;
+  }
+}
+
+/* Morph animation for spheres */
+.animate-morph {
+  animation: morph 10s ease-in-out infinite;
+}
+
+@keyframes morph {
+  0%, 100% {
+    border-radius: 50%;
+    transform: scale(1) rotate(0deg);
+  }
+  25% {
+    border-radius: 40% 60% 55% 45%;
+    transform: scale(1.05) rotate(45deg);
+  }
+  50% {
+    border-radius: 55% 45% 40% 60%;
+    transform: scale(0.95) rotate(90deg);
+  }
+  75% {
+    border-radius: 45% 55% 60% 40%;
+    transform: scale(1.08) rotate(135deg);
+  }
+}
+
+/* Pulse glow effect — optional utility class */
+.animate-pulse-glow {
+  animation: pulse-glow 4s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.5;
+    filter: brightness(1);
+  }
+  50% {
+    opacity: 0.9;
+    filter: brightness(1.3);
+  }
+}

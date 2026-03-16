@@ -10,6 +10,7 @@ import { GraduationCap, User, Users, Shield, Crown, Mail, Lock, Eye, EyeOff, Arr
 import { USER_ROLES, ROLE_COLORS, type UserRole } from "@/lib/constants"
 import { mockStorage } from "@/lib/mock-data"
 import { apiClient } from "@/lib/api"
+import Floating3DShapes from "@/components/Floating3DShapes"
 
 const ROLE_OPTIONS = [
   { value: USER_ROLES.STUDENT, label: "Student", icon: GraduationCap },
@@ -92,6 +93,9 @@ export default function LoginPage() {
         className="absolute inset-0"
         style={{ backgroundColor: "rgba(0, 0, 0, 0.6)" }}
       />
+
+      {/* 3D Floating Shapes */}
+      <Floating3DShapes />
 
       {/* Content */}
       <div className="relative z-10 min-h-screen py-12 px-4">

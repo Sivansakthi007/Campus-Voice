@@ -21,6 +21,7 @@ import {
   Loader2,
 } from "lucide-react"
 import { USER_ROLES, ROLE_COLORS, STAFF_ROLES, type UserRole } from "@/lib/constants"
+import Floating3DShapes from "@/components/Floating3DShapes"
 
 // Use the same backend URL as the API client for production deployments
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "https://campus-voice-backend-hhkp.onrender.com";
@@ -218,6 +219,9 @@ export default function RegisterPage() {
         className="absolute inset-0"
         style={{ backgroundColor: "rgba(0, 0, 0, 0.4)" }}
       />
+
+      {/* 3D Floating Shapes */}
+      <Floating3DShapes />
 
       {/* Main Content */}
       <div className="relative z-10 min-h-screen py-8 px-4 flex flex-col">
