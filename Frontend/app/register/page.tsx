@@ -317,7 +317,7 @@ export default function RegisterPage() {
     <div
       className="relative min-h-screen w-full"
       style={{
-        backgroundImage: "url('/campus-voice-bg.png')",
+        backgroundImage: "url('/signup-bg.png')",
         backgroundSize: "cover",
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
