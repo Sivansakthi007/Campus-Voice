@@ -21,7 +21,7 @@ import {
   UserPlus,
   Hash,
   Building2,
-  Briefcase,
+    Briefcase,
 } from "lucide-react"
 import { USER_ROLES, ROLE_COLORS, STAFF_ROLES, type UserRole } from "@/lib/constants"
 
@@ -210,8 +210,9 @@ export default function RegisterPage() {
     <div
       className="relative min-h-screen w-full"
       style={{
-        backgroundImage: "url('/signup-bg.png')",
+        backgroundImage: "url('/campus-auth-bg.png')",
         backgroundSize: "cover",
+
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
         backgroundAttachment: "fixed",
@@ -223,14 +224,14 @@ export default function RegisterPage() {
         style={{
           background: `
             linear-gradient(180deg, 
-              rgba(0, 0, 0, 0.55) 0%, 
-              rgba(10, 5, 30, 0.7) 40%, 
-              rgba(15, 10, 40, 0.8) 70%,
-              rgba(5, 0, 20, 0.9) 100%
+              rgba(0, 0, 0, 0.25) 0%, 
+              rgba(0, 0, 0, 0.4) 50%, 
+              rgba(0, 0, 0, 0.8) 100%
             )
           `,
         }}
       />
+
 
       {/* Depth-of-field vignette */}
       <div
@@ -240,11 +241,10 @@ export default function RegisterPage() {
         }}
       />
 
-      {/* Brighter center focus behind the card */}
       <div
         className="absolute inset-0"
         style={{
-          background: "radial-gradient(ellipse at 50% 45%, rgba(99, 102, 241, 0.08) 0%, transparent 55%)",
+          background: "radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.4) 100%)",
         }}
       />
 

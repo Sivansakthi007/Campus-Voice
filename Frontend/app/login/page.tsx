@@ -10,6 +10,7 @@ import { USER_ROLES, ROLE_COLORS, type UserRole } from "@/lib/constants"
 import { mockStorage } from "@/lib/mock-data"
 import { apiClient } from "@/lib/api"
 
+
 const ROLE_OPTIONS = [
   { value: USER_ROLES.STUDENT, label: "Student", icon: GraduationCap },
   { value: USER_ROLES.STAFF, label: "Staff", icon: User },
@@ -79,8 +80,9 @@ export default function LoginPage() {
     <div
       className="relative min-h-screen w-full"
       style={{
-        backgroundImage: "url('/signin-bg.png')",
+        backgroundImage: "url('/campus-auth-bg.png')",
         backgroundSize: "cover",
+
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
         backgroundAttachment: "fixed",
@@ -92,14 +94,14 @@ export default function LoginPage() {
         style={{
           background: `
             linear-gradient(180deg, 
-              rgba(0, 0, 0, 0.55) 0%, 
-              rgba(10, 5, 30, 0.7) 40%, 
-              rgba(15, 10, 40, 0.8) 70%,
-              rgba(5, 0, 20, 0.9) 100%
+              rgba(0, 0, 0, 0.25) 0%, 
+              rgba(0, 0, 0, 0.4) 50%, 
+              rgba(0, 0, 0, 0.8) 100%
             )
           `,
         }}
       />
+
 
       {/* Depth-of-field vignette */}
       <div
