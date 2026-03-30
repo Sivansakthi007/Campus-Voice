@@ -175,9 +175,11 @@
 
 /* Custom glassmorphism styles */
 .glass-card {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
 
 .glass-card-hover {
@@ -580,14 +582,15 @@
 
 /* Glass container with animated glow */
 .glass-login-container {
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(20px) saturate(1.5);
-  -webkit-backdrop-filter: blur(20px) saturate(1.5);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 0 40px rgba(99, 102, 241, 0.05);
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px) saturate(1.5);
+  -webkit-backdrop-filter: blur(12px) saturate(1.5);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 40px rgba(99, 102, 241, 0.08);
   position: relative;
   overflow: hidden;
 }
@@ -696,4 +699,106 @@
 
 .light .glass-login-container::before {
   background: linear-gradient(135deg, rgba(79, 70, 229, 0.2), transparent 40%, transparent 60%, rgba(139, 92, 246, 0.2));
+}
+
+/* ===== AUTH PAGE UTILITIES ===== */
+
+/* Dark overlay for auth pages (background image visibility fix) */
+.auth-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 1;
+}
+
+/* High-contrast glass input for auth forms */
+.glass-input {
+  width: 100%;
+  padding: 12px 16px 12px 44px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  color: #fff;
+  font-size: 0.95rem;
+  transition: all 0.3s ease;
+  outline: none;
+}
+
+.glass-input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.glass-input:focus {
+  border-color: rgba(99, 102, 241, 0.6);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15), 0 0 20px rgba(99, 102, 241, 0.1);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Gradient button utility */
+.gradient-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 32px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 50%, #8b5cf6 100%);
+  color: #fff;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 8px 30px rgba(99, 102, 241, 0.3);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.gradient-btn:hover {
+  transform: scale(1.03) translateY(-1px);
+  box-shadow: 0 12px 40px rgba(99, 102, 241, 0.4);
+}
+
+.gradient-btn:active {
+  transform: scale(0.97);
+}
+
+/* Responsive auth form container */
+.auth-form-container {
+  width: 90%;
+  max-width: 450px;
+  margin: 0 auto;
+}
+
+@media (min-width: 768px) {
+  .auth-form-container {
+    width: 70%;
+  }
+}
+
+@media (min-width: 1024px) {
+  .auth-form-container {
+    width: 100%;
+    max-width: 450px;
+  }
+}
+
+/* Light mode overrides for new utilities */
+.light .glass-input {
+  background: #FFFFFF;
+  border-color: #E5E7EB;
+  color: #111827;
+}
+
+.light .glass-input::placeholder {
+  color: #9CA3AF;
+}
+
+.light .glass-input:focus {
+  border-color: #4F46E5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.light .auth-overlay {
+  background: rgba(255, 255, 255, 0.7);
 }

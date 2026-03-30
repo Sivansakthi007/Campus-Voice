@@ -327,21 +327,21 @@ export default function WelcomePage() {
 
       {/* ---------- Center Content (Logo + UI) ---------- */}
       <div
-        className="absolute inset-0 flex flex-col items-center justify-center z-10"
+        className="absolute inset-0 flex flex-col items-center justify-center z-10 px-4"
         style={{ pointerEvents: "none" }}
       >
         {/* Logo Convergence */}
         <AnimatePresence>
           {showLogo && (
             <motion.div
-              className="logo-glow flex flex-col items-center"
+              className="logo-glow flex flex-col items-center gap-4"
               initial={{ opacity: 0, scale: 0.4 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ type: "spring", stiffness: 180, damping: 18 }}
             >
               {/* Icon */}
               <motion.div
-                className="relative mb-4"
+                className="relative"
                 animate={{
                   scale: [1, 1.06, 1],
                 }}
@@ -400,7 +400,7 @@ export default function WelcomePage() {
 
               {/* Subtitle */}
               <motion.p
-                className="text-sm md:text-base mt-3 font-medium tracking-wide"
+                className="text-sm md:text-base font-medium tracking-wide text-center"
                 style={{ color: "rgba(148, 163, 184, 0.9)" }}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -416,7 +416,7 @@ export default function WelcomePage() {
         <AnimatePresence>
           {showUI && (
             <motion.div
-              className="mt-10"
+              className="mt-8 flex flex-col items-center w-full px-4"
               style={{ pointerEvents: "auto" }}
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}

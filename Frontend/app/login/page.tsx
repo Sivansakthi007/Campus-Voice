@@ -88,31 +88,20 @@ export default function LoginPage() {
         backgroundAttachment: "fixed",
       }}
     >
-      {/* Cinematic dark gradient overlay with depth */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background: `
-            linear-gradient(180deg, 
-              rgba(0, 0, 0, 0.25) 0%, 
-              rgba(0, 0, 0, 0.4) 50%, 
-              rgba(0, 0, 0, 0.8) 100%
-            )
-          `,
-        }}
-      />
+      {/* Dark overlay for content visibility */}
+      <div className="auth-overlay" />
 
-
-      {/* Depth-of-field vignette */}
+      {/* Subtle vignette */}
       <div
         className="absolute inset-0"
         style={{
           background: "radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.4) 100%)",
+          zIndex: 2,
         }}
       />
 
       {/* Content */}
-      <div className="relative z-10 min-h-screen py-12 px-4">
+      <div className="relative z-10 min-h-screen py-12 px-4 flex flex-col">
         <div className="container mx-auto max-w-6xl">
           {/* Header */}
           <div className="flex items-center justify-between mb-8">
@@ -154,7 +143,7 @@ export default function LoginPage() {
                 <p className="text-center text-gray-300 mb-6 text-sm md:text-lg">
                   Select your role to continue
                 </p>
-                <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4 mb-4">
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4 mb-4">
                   {ROLE_OPTIONS.map((role, index) => {
                     const Icon = role.icon
                     const colors = ROLE_COLORS[role.value]
@@ -182,8 +171,8 @@ export default function LoginPage() {
 
             {/* Login Form */}
             {selectedRole && (
-              <div className="max-w-md mx-auto">
-                <div className="glass-login-container rounded-2xl p-8 shadow-2xl">
+              <div className="auth-form-container">
+                <div className="glass-login-container rounded-2xl p-6 md:p-8 shadow-2xl">
                   {/* Selected Role Badge */}
                   <div className="flex items-center justify-center mb-8">
                     {(() => {
@@ -218,11 +207,8 @@ export default function LoginPage() {
                           required
                           value={formData.email}
                           onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                          className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/30 transition-all duration-300"
+                          className="w-full pl-11 pr-4 py-3 glass-input"
                           placeholder="your.email@example.com"
-                          style={{
-                            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-                          }}
                         />
                       </div>
                     </div>
@@ -237,11 +223,8 @@ export default function LoginPage() {
                           required
                           value={formData.password}
                           onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                          className="w-full pl-11 pr-12 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/30 transition-all duration-300"
+                          className="w-full pl-11 pr-12 py-3 glass-input"
                           placeholder="Enter your password"
-                          style={{
-                            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-                          }}
                         />
                         <button
                           type="button"
@@ -263,7 +246,7 @@ export default function LoginPage() {
                     {/* Submit Button */}
                     <button
                       type="submit"
-                      className={`w-full py-4 bg-gradient-to-r ${ROLE_COLORS[selectedRole].gradient} rounded-xl font-semibold text-white shadow-lg mt-6 relative overflow-hidden transition-transform active:scale-95`}
+                      className={`w-full py-4 bg-gradient-to-r ${ROLE_COLORS[selectedRole].gradient} rounded-xl font-semibold text-white shadow-lg mt-6 relative overflow-hidden transition-all active:scale-95 hover:shadow-xl hover:scale-[1.02]`}
                       style={{
                         boxShadow: "0 8px 30px rgba(0,0,0,0.3)",
                       }}

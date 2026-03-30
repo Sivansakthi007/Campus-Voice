@@ -243,39 +243,20 @@ export default function RegisterPage() {
         backgroundAttachment: "fixed",
       }}
     >
-      {/* Cinematic dark gradient overlay with depth */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background: `
-            linear-gradient(180deg, 
-              rgba(0, 0, 0, 0.25) 0%, 
-              rgba(0, 0, 0, 0.4) 50%, 
-              rgba(0, 0, 0, 0.8) 100%
-            )
-          `,
-        }}
-      />
+      {/* Dark overlay for content visibility */}
+      <div className="auth-overlay" />
 
-
-      {/* Depth-of-field vignette */}
+      {/* Subtle vignette */}
       <div
         className="absolute inset-0"
         style={{
           background: "radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.4) 100%)",
+          zIndex: 2,
         }}
       />
 
-      <div
-        className="absolute inset-0"
-        style={{
-          background: "radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.4) 100%)",
-        }}
-      />
-
-      {/* Content */}
-      <div className="relative z-10 min-h-screen py-8 px-4">
-        <div className="container mx-auto max-w-6xl">
+      <div className="relative z-10 min-h-screen py-8 px-4 flex flex-col">
+        <div className="container mx-auto max-w-6xl flex-1 flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <button
@@ -316,7 +297,7 @@ export default function RegisterPage() {
                 <p className="text-center text-gray-300 mb-6 text-sm md:text-lg">
                   Select your role to continue
                 </p>
-                <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4 mb-4">
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4 mb-4">
                   {ROLE_OPTIONS.map((role, index) => {
                     const Icon = role.icon
                     const colors = ROLE_COLORS[role.value]
@@ -326,7 +307,7 @@ export default function RegisterPage() {
                         key={role.value}
                         onClick={() => handleRoleSelect(role.value)}
                         disabled={isDisabled}
-                        className={`role-card-premium glass-card p-4 md:p-6 rounded-xl text-center group hover:border-opacity-50 transition-all ${colors.border} ${isDisabled ? "opacity-40 cursor-not-allowed" : ""}`}
+                        className={`role-card-premium glass-card p-4 md:p-6 rounded-2xl text-center group hover:border-opacity-50 transition-all ${colors.border} ${isDisabled ? "opacity-40 cursor-not-allowed" : ""}`}
                         style={{
                           boxShadow: isDisabled ? "none" : "0 4px 20px rgba(0,0,0,0.2)",
                         }}
@@ -363,8 +344,8 @@ export default function RegisterPage() {
 
             {/* Registration Form */}
             {selectedRole && (
-              <div className="max-w-lg mx-auto">
-                <div className="glass-login-container rounded-2xl p-8 shadow-2xl">
+              <div className="auth-form-container">
+                <div className="glass-login-container rounded-2xl p-6 md:p-8 shadow-2xl">
                   {/* Selected Role Badge */}
                   <div className="flex items-center justify-center mb-6">
                     {(() => {
@@ -399,11 +380,8 @@ export default function RegisterPage() {
                           required
                           value={formData.name}
                           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                          className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/30 transition-all duration-300"
+                          className="w-full pl-11 pr-4 py-3 glass-input"
                           placeholder="Enter your full name"
-                          style={{
-                            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-                          }}
                         />
                       </div>
                     </div>
@@ -418,11 +396,8 @@ export default function RegisterPage() {
                           required
                           value={formData.email}
                           onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                          className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/30 transition-all duration-300"
+                          className="w-full pl-11 pr-4 py-3 glass-input"
                           placeholder="your.email@example.com"
-                          style={{
-                            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-                          }}
                         />
                       </div>
                     </div>
@@ -440,11 +415,8 @@ export default function RegisterPage() {
                             required
                             value={formData.department}
                             onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                            className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/30 transition-all duration-300"
+                            className="w-full pl-11 pr-4 py-3 glass-input"
                             placeholder="Enter your department"
-                            style={{
-                              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-                            }}
                           />
                         </div>
                       </div>
@@ -462,11 +434,8 @@ export default function RegisterPage() {
                           required
                           value={formData.idNumber}
                           onChange={(e) => setFormData({ ...formData, idNumber: e.target.value })}
-                          className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/30 transition-all duration-300"
+                          className="w-full pl-11 pr-4 py-3 glass-input"
                           placeholder={selectedRole === USER_ROLES.STUDENT ? "Enter your student ID" : "Enter your staff ID"}
-                          style={{
-                            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-                          }}
                         />
                       </div>
                     </div>
@@ -481,10 +450,7 @@ export default function RegisterPage() {
                             required
                             value={formData.staffRole}
                             onChange={(e) => setFormData({ ...formData, staffRole: e.target.value })}
-                            className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/30 transition-all duration-300 appearance-none"
-                            style={{
-                              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-                            }}
+                            className="w-full pl-11 pr-4 py-3 glass-input appearance-none"
                           >
                             <option value="" disabled className="bg-gray-900 text-white">Select Staff Role</option>
                             {STAFF_ROLES.map((role) => (
@@ -505,11 +471,8 @@ export default function RegisterPage() {
                           required
                           value={formData.password}
                           onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                          className="w-full pl-11 pr-12 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/30 transition-all duration-300"
+                          className="w-full pl-11 pr-12 py-3 glass-input"
                           placeholder="Create a password"
-                          style={{
-                            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-                          }}
                         />
                         <button
                           type="button"
@@ -531,11 +494,8 @@ export default function RegisterPage() {
                           required
                           value={formData.confirmPassword}
                           onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                          className="w-full pl-11 pr-12 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/30 transition-all duration-300"
+                          className="w-full pl-11 pr-12 py-3 glass-input"
                           placeholder="Confirm your password"
-                          style={{
-                            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-                          }}
                         />
                         <button
                           type="button"
@@ -558,7 +518,7 @@ export default function RegisterPage() {
                       </button>
                       <button
                         type="submit"
-                        className={`flex-1 py-3.5 bg-gradient-to-r ${ROLE_COLORS[selectedRole].gradient} rounded-xl font-semibold text-white shadow-lg relative overflow-hidden transition-all active:scale-95`}
+                        className={`flex-1 py-3.5 bg-gradient-to-r ${ROLE_COLORS[selectedRole].gradient} rounded-xl font-semibold text-white shadow-lg relative overflow-hidden transition-all active:scale-95 hover:shadow-xl hover:scale-[1.02]`}
                         style={{
                           boxShadow: "0 8px 30px rgba(0,0,0,0.3)",
                         }}
@@ -632,10 +592,7 @@ export default function RegisterPage() {
                     setPasswordError("")
                   }}
                   autoFocus
-                  className="w-full pl-11 pr-12 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/30 transition-all duration-300"
-                  style={{
-                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-                  }}
+                  className="w-full pl-11 pr-12 py-3 glass-input"
                 />
                 <button
                   type="button"
