@@ -26,7 +26,7 @@ import {
 import { USER_ROLES, ROLE_COLORS, STAFF_ROLES, type UserRole } from "@/lib/constants"
 
 // Use the same backend URL as the API client for production deployments
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "https://campus-voice-backend-hhkp.onrender.com";
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "https://campus-voice-backend-cr0o.onrender.com";
 
 // Signup approval status fetched from backend
 type SignupApprovalMap = Record<string, boolean>;
