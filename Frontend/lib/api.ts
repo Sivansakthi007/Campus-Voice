@@ -863,6 +863,34 @@ class ApiClient {
     return response.data || []
   }
 
+  // ===== SIGNUP APPROVAL SETTINGS METHODS =====
+
+  async getSignupApprovalSettings(): Promise<Record<string, boolean>> {
+    const response = await this.request<Record<string, boolean>>("/api/admin/signup-approval")
+    return response.data
+  }
+
+  async updateSignupApprovalSettings(settings: {
+    student?: boolean
+    staff?: boolean
+    hod?: boolean
+    principal?: boolean
+  }): Promise<Record<string, boolean>> {
+    const response = await this.request<Record<string, boolean>>("/api/admin/signup-approval", {
+      method: "PUT",
+      body: JSON.stringify(settings),
+    })
+    return response.data
+  }
+
+  async getSignupApprovalStatus(): Promise<Record<string, boolean>> {
+    // Public endpoint — no auth required, use raw fetch
+    const url = `${this.baseURL}/api/auth/signup-approval-status`
+    const res = await fetch(url, { cache: "no-store" })
+    const data = await res.json()
+    return data.data || {}
+  }
+
   // Token management
   setToken(token: string | null) {
     this.token = token

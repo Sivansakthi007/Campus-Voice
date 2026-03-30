@@ -28,6 +28,9 @@ import { USER_ROLES, ROLE_COLORS, STAFF_ROLES, type UserRole } from "@/lib/const
 // Use the same backend URL as the API client for production deployments
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "https://campus-voice-backend-hhkp.onrender.com";
 
+// Signup approval status fetched from backend
+type SignupApprovalMap = Record<string, boolean>;
+
 const ROLE_OPTIONS = [
   { value: USER_ROLES.STUDENT, label: "Student", icon: GraduationCap, description: "Submit and track complaints" },
   { value: USER_ROLES.STAFF, label: "Staff", icon: User, description: "Manage assigned complaints" },
@@ -80,8 +83,30 @@ export default function RegisterPage() {
   const [verifying, setVerifying] = useState(false)
   const [showRegPassword, setShowRegPassword] = useState(false)
   const [verifiedPassword, setVerifiedPassword] = useState("")
+  const [signupApproval, setSignupApproval] = useState<SignupApprovalMap>({})
+
+  // Fetch signup approval status on mount
+  useEffect(() => {
+    const fetchApproval = async () => {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/auth/signup-approval-status`, { cache: "no-store" })
+        const json = await res.json()
+        if (json.data) setSignupApproval(json.data)
+      } catch {
+        // Silently fall back — allow all roles if fetch fails
+      }
+    }
+    fetchApproval()
+  }, [])
 
   const handleRoleSelect = (role: UserRole) => {
+    // Check signup approval
+    const approvalStatus = signupApproval[role]
+    if (approvalStatus === false) {
+      toast.error("Signup is currently disabled for this role. Please contact Admin.")
+      return
+    }
+
     if (PASSWORD_PROTECTED_ROLES.has(role)) {
       // Show password modal for protected roles
       setPendingRole(role)
@@ -295,13 +320,15 @@ export default function RegisterPage() {
                   {ROLE_OPTIONS.map((role, index) => {
                     const Icon = role.icon
                     const colors = ROLE_COLORS[role.value]
+                    const isDisabled = signupApproval[role.value] === false
                     return (
                       <button
                         key={role.value}
                         onClick={() => handleRoleSelect(role.value)}
-                        className={`role-card-premium glass-card p-4 md:p-6 rounded-xl text-center group hover:border-opacity-50 transition-all ${colors.border}`}
+                        disabled={isDisabled}
+                        className={`role-card-premium glass-card p-4 md:p-6 rounded-xl text-center group hover:border-opacity-50 transition-all ${colors.border} ${isDisabled ? "opacity-40 cursor-not-allowed" : ""}`}
                         style={{
-                          boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
+                          boxShadow: isDisabled ? "none" : "0 4px 20px rgba(0,0,0,0.2)",
                         }}
                       >
                         <div
@@ -312,8 +339,16 @@ export default function RegisterPage() {
                         <h3 className="text-sm md:text-lg font-semibold text-white">{role.label}</h3>
                         <p className="text-[10px] md:text-xs text-white/50 mt-1">{role.description}</p>
 
+                        {/* Disabled indicator */}
+                        {isDisabled && (
+                          <div className="mt-2 flex items-center justify-center gap-1 text-[10px] md:text-xs text-red-400/80">
+                            <X className="w-2.5 h-2.5 md:w-3 md:h-3" />
+                            <span>Registration Closed</span>
+                          </div>
+                        )}
+
                         {/* Password Required indicator */}
-                        {PASSWORD_PROTECTED_ROLES.has(role.value) && (
+                        {!isDisabled && PASSWORD_PROTECTED_ROLES.has(role.value) && (
                           <div className="mt-2 flex items-center justify-center gap-1 text-[10px] md:text-xs text-amber-400/80">
                             <Lock className="w-2.5 h-2.5 md:w-3 md:h-3" />
                             <span>Password Required</span>

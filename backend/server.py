@@ -10,7 +10,7 @@ from pathlib import Path
 from sqlalchemy import select, func, text, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_engine, get_session, Base
-from models import User, Complaint, StaffRating, HODRating, HODReportToggle, Notification, Suggestion, SuggestionVote
+from models import User, Complaint, StaffRating, HODRating, HODReportToggle, Notification, Suggestion, SuggestionVote, SignupApprovalSetting
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Dict, Any
 from enum import Enum
@@ -305,7 +305,25 @@ async def startup():
                     logger.info("Migration: Escalation columns verified/added")
             except Exception as migration_err:
                 logger.warning(f"Migration check for escalation columns: {str(migration_err)}")
-            
+
+            # Seed signup_approval_settings with defaults (all roles enabled)
+            try:
+                async with engine.begin() as conn:
+                    from sqlalchemy.ext.asyncio import AsyncSession as _AS
+                    from sqlalchemy.orm import sessionmaker as _sm
+                    _sf = _sm(engine, class_=_AS, expire_on_commit=False)
+                    async with _sf() as _sess:
+                        for _role in ["student", "staff", "hod", "principal"]:
+                            exists = (await _sess.execute(
+                                select(SignupApprovalSetting).where(SignupApprovalSetting.role == _role)
+                            )).scalars().first()
+                            if not exists:
+                                _sess.add(SignupApprovalSetting(role=_role, is_enabled=True))
+                        await _sess.commit()
+                logger.info("Migration: signup_approval_settings seeded")
+            except Exception as migration_err:
+                logger.warning(f"Seeding signup_approval_settings: {str(migration_err)}")
+
             logger.info("Database connection established successfully!")
             return
         except Exception as e:
@@ -845,6 +863,19 @@ async def verify_registration_password(data: RegistrationPasswordVerify):
 
 @api_router.post("/auth/register")
 async def register(user_data: UserCreate, session: AsyncSession = Depends(get_session)):
+    # ── Signup Approval check ──
+    signup_role = user_data.role.lower().strip()
+    if signup_role in ("student", "staff", "hod", "principal"):
+        setting = (await session.execute(
+            select(SignupApprovalSetting).where(SignupApprovalSetting.role == signup_role)
+        )).scalars().first()
+        if setting and not setting.is_enabled:
+            return create_response(
+                False,
+                "Signup is currently disabled for this role. Please contact Admin.",
+                status_code=403
+            )
+
     # Check if user exists
     stmt = select(User).where(User.email == user_data.email)
     res = await session.execute(stmt)
@@ -1021,6 +1052,72 @@ async def delete_user(user_id: str, current_user: dict = Depends(get_current_use
     logger.info(f"User {user_id} deleted by Admin {current_user['id']}")
     
     return create_response(True, "User deleted successfully")
+
+
+# ===== SIGNUP APPROVAL SETTINGS ENDPOINTS =====
+
+class SignupApprovalUpdate(BaseModel):
+    """Request body for updating signup approval settings."""
+    student: Optional[bool] = None
+    staff: Optional[bool] = None
+    hod: Optional[bool] = None
+    principal: Optional[bool] = None
+
+
+@api_router.get("/admin/signup-approval")
+async def get_signup_approval_settings(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get signup approval toggle states (Admin only)."""
+    if current_user["role"] != UserRole.ADMIN:
+        return create_response(False, "Permission denied", status_code=403)
+
+    result = await session.execute(select(SignupApprovalSetting))
+    settings = result.scalars().all()
+    data = {s.role: s.is_enabled for s in settings}
+    return create_response(True, "Signup approval settings retrieved", data)
+
+
+@api_router.put("/admin/signup-approval")
+async def update_signup_approval_settings(
+    body: SignupApprovalUpdate,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Update signup approval toggle states (Admin only)."""
+    if current_user["role"] != UserRole.ADMIN:
+        return create_response(False, "Permission denied", status_code=403)
+
+    updates = body.model_dump(exclude_none=True)
+    if not updates:
+        return create_response(False, "No settings provided", status_code=400)
+
+    for role_name, enabled in updates.items():
+        setting = (await session.execute(
+            select(SignupApprovalSetting).where(SignupApprovalSetting.role == role_name)
+        )).scalars().first()
+        if setting:
+            setting.is_enabled = enabled
+            setting.updated_by = current_user["id"]
+
+    await session.commit()
+    logger.info(f"Signup approval updated by Admin {current_user['id']}: {updates}")
+
+    # Return fresh state
+    result = await session.execute(select(SignupApprovalSetting))
+    settings = result.scalars().all()
+    data = {s.role: s.is_enabled for s in settings}
+    return create_response(True, "Signup approval settings updated", data)
+
+
+@api_router.get("/auth/signup-approval-status")
+async def get_signup_approval_status(session: AsyncSession = Depends(get_session)):
+    """Public endpoint: returns which roles have signup enabled."""
+    result = await session.execute(select(SignupApprovalSetting))
+    settings = result.scalars().all()
+    data = {s.role: s.is_enabled for s in settings}
+    return create_response(True, "Signup approval status", data)
 
 
 

@@ -174,3 +174,14 @@ class SuggestionVote(Base):
     student_id = Column(String(36), nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+
+class SignupApprovalSetting(Base):
+    """Admin-controlled toggle for enabling/disabling signup per role."""
+    __tablename__ = "signup_approval_settings"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    role = Column(String(50), unique=True, nullable=False)  # student, staff, hod, principal
+    is_enabled = Column(Boolean, default=True, nullable=False)
+    updated_by = Column(String(36), nullable=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+

@@ -21,6 +21,7 @@ import {
   ClipboardCheck,
   AlertTriangle,
   Lightbulb,
+  UserCheck,
 } from "lucide-react"
 import { USER_ROLES, ROLE_COLORS, type UserRole } from "@/lib/constants"
 import { mockStorage } from "@/lib/mock-data"
@@ -75,6 +76,7 @@ const SIDEBAR_ITEMS = {
     { icon: LayoutDashboard, label: "Dashboard", path: "" },
     { icon: List, label: "All Complaints", path: "/complaints" },
     { icon: Users, label: "User Management", path: "/users" },
+    { icon: UserCheck, label: "Signup Approval", path: "/signup-approval" },
     { icon: BarChart3, label: "Analytics", path: "/analytics" },
     { icon: User, label: "Profile", path: "/profile" },
     { icon: Settings, label: "Settings", path: "/settings" },
