@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { MessageCircle, X, Send, Bot } from "lucide-react"
+import { useState, useRef, useEffect, useCallback } from "react"
+import { MessageCircle, X, Send, Bot, Sparkles } from "lucide-react"
 import { ROLE_COLORS, type UserRole } from "@/lib/constants"
+import "@/styles/chatbot.css"
 
+/* ===== Types ===== */
 interface ChatMessage {
   id: string
   text: string
@@ -16,176 +17,361 @@ interface ChatbotProps {
   role: UserRole
 }
 
+/* ===== Quick Reply Suggestions ===== */
+const QUICK_REPLIES = [
+  "How to submit a complaint?",
+  "Check my status",
+  "Anonymous complaints",
+  "Help",
+]
+
+/* ===== Main Component ===== */
 export function Chatbot({ role }: ChatbotProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [isVisible, setIsVisible] = useState(false) // controls DOM presence
+  const [animState, setAnimState] = useState<"entering" | "exiting" | "idle">("idle")
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
-      id: "1",
-      text: "Hello! I'm your CampusVoice assistant. How can I help you today?",
+      id: "welcome",
+      text: "Hello! 👋 I'm your CampusVoice assistant. How can I help you today?",
       sender: "bot",
       timestamp: new Date(),
     },
   ])
   const [input, setInput] = useState("")
+  const [isTyping, setIsTyping] = useState(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const colors = ROLE_COLORS[role]
 
+  /* ===== Auto-scroll to newest message ===== */
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [])
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages, isTyping, scrollToBottom])
+
+  /* ===== Focus input when chat opens ===== */
+  useEffect(() => {
+    if (isOpen && animState === "idle") {
+      setTimeout(() => inputRef.current?.focus(), 300)
+    }
+  }, [isOpen, animState])
+
+  /* ===== Open / Close with animation ===== */
+  const handleOpen = () => {
+    setIsVisible(true)
+    setIsOpen(true)
+    setAnimState("entering")
+    setTimeout(() => setAnimState("idle"), 400)
+  }
+
+  const handleClose = () => {
+    setAnimState("exiting")
+    setTimeout(() => {
+      setIsOpen(false)
+      setIsVisible(false)
+      setAnimState("idle")
+    }, 300)
+  }
+
+  /* ===== Send message ===== */
   const handleSend = () => {
     if (!input.trim()) return
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
-      text: input,
+      text: input.trim(),
       sender: "user",
       timestamp: new Date(),
     }
 
     setMessages((prev) => [...prev, userMessage])
+    const currentInput = input
     setInput("")
 
-    // Simulate bot response
+    // Show typing indicator
+    setIsTyping(true)
+
+    // Simulate bot response with delay
+    const responseDelay = 800 + Math.random() * 700
     setTimeout(() => {
+      setIsTyping(false)
       const botMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
-        text: getBotResponse(input, role),
+        text: getBotResponse(currentInput, role),
         sender: "bot",
         timestamp: new Date(),
       }
       setMessages((prev) => [...prev, botMessage])
-    }, 1000)
+    }, responseDelay)
   }
+
+  /* ===== Handle Enter key ===== */
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
+
+  /* ===== Handle quick reply click ===== */
+  const handleQuickReply = (text: string) => {
+    setInput(text)
+    // Auto-send the quick reply
+    const userMessage: ChatMessage = {
+      id: Date.now().toString(),
+      text,
+      sender: "user",
+      timestamp: new Date(),
+    }
+    setMessages((prev) => [...prev, userMessage])
+    setIsTyping(true)
+
+    const responseDelay = 800 + Math.random() * 700
+    setTimeout(() => {
+      setIsTyping(false)
+      const botMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        text: getBotResponse(text, role),
+        sender: "bot",
+        timestamp: new Date(),
+      }
+      setMessages((prev) => [...prev, botMessage])
+    }, responseDelay)
+    setInput("")
+  }
+
+  /* ===== Format timestamp ===== */
+  const formatTime = (date: Date) =>
+    date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 
   return (
     <>
-      {/* Chat Button */}
-      <AnimatePresence>
-        {!isOpen && (
-          <motion.button
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            exit={{ scale: 0 }}
-            onClick={() => setIsOpen(true)}
-            className={`fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-gradient-to-br ${colors.gradient} shadow-2xl flex items-center justify-center hover:scale-110 transition-transform`}
-          >
-            <MessageCircle className="w-6 h-6 text-white" />
-          </motion.button>
-        )}
-      </AnimatePresence>
+      {/* ===== Floating Action Button ===== */}
+      {!isOpen && (
+        <button
+          id="chatbot-fab"
+          onClick={handleOpen}
+          className={`chatbot-fab`}
+          style={{ background: `linear-gradient(135deg, var(--tw-gradient-stops))` }}
+          aria-label="Open chat assistant"
+        >
+          <div className={`chatbot-fab-badge`} />
+          <MessageCircle />
+        </button>
+      )}
 
-      {/* Chat Window */}
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            className="fixed bottom-6 right-6 z-40 w-96 h-[600px] glass-card rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-white/10"
+      {/* ===== Chat Window ===== */}
+      {isVisible && (
+        <div
+          id="chatbot-window"
+          className={`chatbot-window ${
+            animState === "entering"
+              ? "chatbot-entering"
+              : animState === "exiting"
+              ? "chatbot-exiting"
+              : ""
+          }`}
+          role="dialog"
+          aria-label="Chat assistant"
+        >
+          {/* --- Header --- */}
+          <div
+            className="chatbot-header"
+            style={{
+              background: `linear-gradient(135deg, #6366f1, #8b5cf6, #a78bfa)`,
+            }}
           >
-            {/* Header */}
-            <div className={`bg-gradient-to-r ${colors.gradient} p-4 flex items-center justify-between`}>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                  <Bot className="w-5 h-5 text-white" />
+            <div className="chatbot-header-info">
+              <div className="chatbot-header-avatar">
+                <Bot />
+              </div>
+              <div className="chatbot-header-text">
+                <h3>CampusVoice AI</h3>
+                <p>
+                  <span className="chatbot-online-dot" />
+                  Always here to help
+                </p>
+              </div>
+            </div>
+            <button
+              id="chatbot-close"
+              className="chatbot-header-close"
+              onClick={handleClose}
+              aria-label="Close chat"
+            >
+              <X />
+            </button>
+          </div>
+
+          {/* --- Messages --- */}
+          <div className="chatbot-messages" id="chatbot-messages">
+            {/* Welcome state for first-time */}
+            {messages.length === 1 && (
+              <div className="chatbot-welcome">
+                <div className="chatbot-welcome-icon">
+                  <Sparkles />
                 </div>
-                <div>
-                  <h3 className="font-bold text-white">CampusVoice AI</h3>
-                  <p className="text-xs text-white/80">Always here to help</p>
+                <h4>Welcome to CampusVoice AI</h4>
+                <p>
+                  Ask me anything about submitting complaints, checking status,
+                  or navigating the system.
+                </p>
+              </div>
+            )}
+
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={`chatbot-msg ${
+                  message.sender === "user"
+                    ? "chatbot-msg--user"
+                    : "chatbot-msg--bot"
+                }`}
+              >
+                <div className="chatbot-msg-avatar">
+                  {message.sender === "bot" ? (
+                    <Bot style={{ width: 16, height: 16 }} />
+                  ) : (
+                    "You"
+                  )}
+                </div>
+                <div className="chatbot-msg-content">
+                  <div className="chatbot-msg-bubble">
+                    {message.text}
+                  </div>
+                  <span className="chatbot-msg-time">
+                    {formatTime(message.timestamp)}
+                  </span>
                 </div>
               </div>
-              <button onClick={() => setIsOpen(false)} className="hover:bg-white/20 p-2 rounded-lg transition-colors">
-                <X className="w-5 h-5 text-white" />
-              </button>
-            </div>
+            ))}
 
-            {/* Messages */}
-            <div className="flex-1 p-4 space-y-4 overflow-y-auto">
-              {messages.map((message) => (
-                <motion.div
-                  key={message.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"}`}
+            {/* Typing indicator */}
+            {isTyping && (
+              <div className="chatbot-typing">
+                <div className="chatbot-msg-avatar" style={{
+                  background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                  width: 28, height: 28, borderRadius: "50%",
+                  display: "flex", alignItems: "center", justifyContent: "center"
+                }}>
+                  <Bot style={{ width: 14, height: 14, color: "#fff" }} />
+                </div>
+                <div className="chatbot-typing-bubble">
+                  <div className="chatbot-typing-dot" />
+                  <div className="chatbot-typing-dot" />
+                  <div className="chatbot-typing-dot" />
+                </div>
+              </div>
+            )}
+
+            {/* Invisible anchor for auto-scroll */}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* --- Quick Replies (shown only at start) --- */}
+          {messages.length <= 2 && !isTyping && (
+            <div className="chatbot-quick-replies">
+              {QUICK_REPLIES.map((reply) => (
+                <button
+                  key={reply}
+                  className="chatbot-quick-reply"
+                  onClick={() => handleQuickReply(reply)}
                 >
-                  <div
-                    className={`max-w-[80%] rounded-2xl p-3 ${
-                      message.sender === "user"
-                        ? `bg-gradient-to-r ${colors.gradient} text-white`
-                        : "glass-card text-gray-200"
-                    }`}
-                  >
-                    <p className="text-sm">{message.text}</p>
-                    <p className="text-xs opacity-60 mt-1">
-                      {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </p>
-                  </div>
-                </motion.div>
+                  {reply}
+                </button>
               ))}
             </div>
+          )}
 
-            {/* Input */}
-            <div className="p-4 border-t border-white/10">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyPress={(e) => e.key === "Enter" && handleSend()}
-                  placeholder="Type your message..."
-                  className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-white/30"
-                />
-                <button
-                  onClick={handleSend}
-                  className={`bg-gradient-to-r ${colors.gradient} p-3 rounded-xl hover:opacity-90 transition-opacity`}
-                >
-                  <Send className="w-5 h-5 text-white" />
-                </button>
-              </div>
+          {/* --- Input Area --- */}
+          <div className="chatbot-input-area">
+            <div className="chatbot-input-wrapper">
+              <input
+                ref={inputRef}
+                id="chatbot-input"
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Type your message..."
+                className="chatbot-input"
+                autoComplete="off"
+              />
+              <button
+                id="chatbot-send"
+                onClick={handleSend}
+                disabled={!input.trim() || isTyping}
+                className="chatbot-send-btn"
+                aria-label="Send message"
+              >
+                <Send />
+              </button>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </div>
+      )}
     </>
   )
 }
 
+/* ===== Bot Response Logic ===== */
 function getBotResponse(input: string, role: UserRole): string {
   const lowerInput = input.toLowerCase()
 
-  // Common responses
-  if (lowerInput.includes("hello") || lowerInput.includes("hi")) {
-    return "Hello! How can I assist you with your grievances today?"
+  // Greetings
+  if (lowerInput.includes("hello") || lowerInput.includes("hi") || lowerInput.includes("hey")) {
+    return "Hello! 😊 How can I assist you with your grievances today?"
   }
 
-  if (lowerInput.includes("status")) {
-    return "You can check your complaint status from the 'My Complaints' page. Each complaint shows its current status and timeline."
+  // Help
+  if (lowerInput.includes("help")) {
+    return "I can help you with:\n• Submitting complaints\n• Checking complaint status\n• Anonymous submissions\n• Understanding the complaint process\n\nJust ask me anything!"
   }
 
-  if (lowerInput.includes("submit") || lowerInput.includes("complaint")) {
-    return "To submit a complaint, click on 'Submit Complaint' in the sidebar. You'll be guided through a 3-step process with AI assistance."
+  // Status
+  if (lowerInput.includes("status") || lowerInput.includes("check")) {
+    return "You can check your complaint status from the 'My Complaints' page. Each complaint shows its current status and timeline with real-time updates. 📊"
+  }
+
+  // Submit / complaint
+  if (lowerInput.includes("submit") || lowerInput.includes("complaint") || lowerInput.includes("how to")) {
+    return "To submit a complaint, click on 'Submit Complaint' in the sidebar. You'll be guided through a simple 3-step process with AI assistance to categorize and prioritize your issue. ✍️"
+  }
+
+  // Anonymous
+  if (lowerInput.includes("anonymous")) {
+    return "Yes, absolutely! You can submit complaints anonymously. Your identity will be fully protected throughout the entire process — from submission to resolution. 🔒"
+  }
+
+  // Thanks
+  if (lowerInput.includes("thank") || lowerInput.includes("thanks")) {
+    return "You're welcome! 😄 Feel free to ask if you need anything else."
   }
 
   // Role-specific responses
   if (role === "student") {
-    if (lowerInput.includes("anonymous")) {
-      return "Yes, you can submit complaints anonymously. Your identity will be protected throughout the process."
-    }
-    return "Students can submit complaints, track their status, view analytics, and provide feedback once resolved. Need help with anything specific?"
+    return "As a student, you can submit complaints, track their status, view analytics, provide feedback once resolved, and even submit anonymously. Need help with anything specific? 🎓"
   }
 
   if (role === "staff") {
-    return "As staff, you can manage assigned complaints, update their status, and view your performance metrics. What would you like to know?"
+    return "As staff, you can manage assigned complaints, update their status, and view your performance metrics on the dashboard. What would you like to know? 👨‍💼"
   }
 
   if (role === "hod") {
-    return "As HOD, you can oversee departmental complaints, manage staff assignments, and access detailed analytics. How can I help?"
+    return "As HOD, you can oversee departmental complaints, manage staff assignments, and access detailed analytics for your department. How can I help? 📋"
   }
 
   if (role === "principal") {
-    return "As Principal, you have access to institution-wide analytics and can handle critical escalated issues. What information do you need?"
+    return "As Principal, you have access to institution-wide analytics, can handle critical escalated issues, and oversee the entire grievance lifecycle. What information do you need? 🏛️"
   }
 
   if (role === "admin") {
-    return "As Admin, you can manage all users, configure system settings, and access comprehensive analytics. What would you like to do?"
+    return "As Admin, you can manage all users, configure system settings, handle signup approvals, and access comprehensive analytics. What would you like to do? ⚙️"
   }
 
-  return "I'm here to help you navigate CampusVoice. You can ask me about submitting complaints, checking status, or using any feature of the system."
+  return "I'm here to help you navigate CampusVoice! You can ask me about submitting complaints, checking status, understanding the process, or using any feature of the system. 💬"
 }

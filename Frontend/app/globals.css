@@ -2,6 +2,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "../styles/footer-watermark.css";
+@import "../styles/chatbot.css";
 
 @custom-variant dark (&:is(.dark *));
 
