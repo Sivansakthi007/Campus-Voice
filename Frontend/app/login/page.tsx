@@ -2,14 +2,26 @@
 
 import type React from "react"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
-import { GraduationCap, User, Users, Shield, Crown, Mail, Lock, Eye, EyeOff, ArrowLeft } from "lucide-react"
+import { GraduationCap, User, Users, Shield, Crown, Mail, Lock, Eye, EyeOff, ArrowLeft, ScanFace, KeyRound } from "lucide-react"
 import { USER_ROLES, ROLE_COLORS, type UserRole } from "@/lib/constants"
 import { mockStorage } from "@/lib/mock-data"
 import { apiClient } from "@/lib/api"
+import dynamic from "next/dynamic"
 
+// Dynamically import FaceCaptureComponent (uses browser APIs)
+const FaceCaptureComponent = dynamic(
+  () => import("@/components/FaceCaptureComponent"),
+  { ssr: false }
+)
+
+// Roles eligible for face recognition login
+const FACE_RECOGNITION_ROLES: Set<string> = new Set([
+  USER_ROLES.ADMIN,
+  USER_ROLES.PRINCIPAL,
+])
 
 const ROLE_OPTIONS = [
   { value: USER_ROLES.STUDENT, label: "Student", icon: GraduationCap },
@@ -30,12 +42,73 @@ export default function LoginPage() {
   })
   const [showPassword, setShowPassword] = useState(false)
 
+  // Face login state
+  const [showFaceLogin, setShowFaceLogin] = useState(false)
+  const [faceLoginProcessing, setFaceLoginProcessing] = useState(false)
+  const [faceLoginMessage, setFaceLoginMessage] = useState<string | null>(null)
+  const [faceLoginAttempts, setFaceLoginAttempts] = useState(0)
+  const faceLoginDebounceRef = useRef(false)
+
   useEffect(() => {
     const roleParam = searchParams.get("role") as UserRole | null
     if (roleParam && Object.values(USER_ROLES).includes(roleParam)) {
       setSelectedRole(roleParam)
     }
   }, [searchParams])
+
+  // Reset face login state when role changes
+  useEffect(() => {
+    setShowFaceLogin(false)
+    setFaceLoginMessage(null)
+    setFaceLoginProcessing(false)
+    setFaceLoginAttempts(0)
+    faceLoginDebounceRef.current = false
+  }, [selectedRole])
+
+  const handleFaceDetected = useCallback(async (embedding: number[]) => {
+    // Debounce — prevent multiple simultaneous calls
+    if (faceLoginDebounceRef.current) return
+    faceLoginDebounceRef.current = true
+    setFaceLoginProcessing(true)
+    setFaceLoginMessage(null)
+
+    try {
+      const res = await apiClient.loginWithFace(embedding)
+      if (res && res.user) {
+        const user = res.user as any
+        const persistedAvatar = mockStorage.getProfileImage?.(user.id) || null
+        mockStorage.setUser({
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          department: user.department,
+          studentId: user.student_id || user.studentId || "",
+          staff_id: user.staff_id || user.staffId || "",
+          avatar: persistedAvatar || user.avatar || "",
+        })
+        toast.success(`Welcome back, ${user.name}! 🎉 (Face login)`)
+        setTimeout(() => {
+          router.push(`/dashboard/${user.role}`)
+        }, 800)
+        return
+      }
+    } catch (error: any) {
+      console.error("Face login error:", error)
+      const msg = error?.message || "Face not recognized."
+      setFaceLoginMessage(msg.includes("not recognized") || msg.includes("No face data")
+        ? "Face not recognized. Please login manually."
+        : msg
+      )
+      setFaceLoginAttempts(prev => prev + 1)
+    } finally {
+      setFaceLoginProcessing(false)
+      // Reset debounce after a delay to prevent rapid-fire
+      setTimeout(() => {
+        faceLoginDebounceRef.current = false
+      }, 3000)
+    }
+  }, [router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -75,6 +148,8 @@ export default function LoginPage() {
       toast.error(error instanceof Error ? error.message : "Login failed")
     }
   }
+
+  const isFaceEligible = selectedRole && FACE_RECOGNITION_ROLES.has(selectedRole)
 
   return (
     <div
@@ -195,6 +270,95 @@ export default function LoginPage() {
                       )
                     })()}
                   </div>
+
+                  {/* ═══ FACE LOGIN SECTION (Admin/Principal) ═══ */}
+                  {isFaceEligible && (
+                    <div className="mb-6">
+                      {/* Face Login Toggle */}
+                      {!showFaceLogin && faceLoginAttempts === 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowFaceLogin(true)}
+                          className={`w-full flex items-center justify-center gap-3 py-3.5 rounded-xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] transition-all group`}
+                        >
+                          <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${ROLE_COLORS[selectedRole].gradient} flex items-center justify-center`}>
+                            <ScanFace className="w-4 h-4 text-white" />
+                          </div>
+                          <span className="text-sm font-medium text-gray-300 group-hover:text-white transition-colors">
+                            Login with Face Recognition
+                          </span>
+                        </button>
+                      )}
+
+                      {/* Face Login Active */}
+                      {showFaceLogin && (
+                        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <ScanFace className="w-4 h-4 text-blue-400" />
+                              <span className="text-sm font-medium text-white">Face Login</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowFaceLogin(false)
+                                setFaceLoginMessage(null)
+                                setFaceLoginProcessing(false)
+                              }}
+                              className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                            >
+                              Skip →
+                            </button>
+                          </div>
+
+                          <FaceCaptureComponent
+                            mode="login"
+                            accentGradient={ROLE_COLORS[selectedRole].gradient}
+                            autoStart={true}
+                            onCapture={() => {}}
+                            onFaceDetected={handleFaceDetected}
+                            isProcessing={faceLoginProcessing}
+                          />
+
+                          {/* Face login message */}
+                          {faceLoginMessage && (
+                            <div className="mt-3 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                              <KeyRound className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                              <span className="text-xs text-amber-400">{faceLoginMessage}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Show after failed face attempt */}
+                      {faceLoginAttempts > 0 && !showFaceLogin && (
+                        <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-white/[0.03] border border-white/10">
+                          <ScanFace className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                          <span className="text-xs text-gray-500">
+                            Face login was not matched.{" "}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowFaceLogin(true)
+                                setFaceLoginMessage(null)
+                                setFaceLoginAttempts(0)
+                              }}
+                              className="text-blue-400 hover:text-blue-300 transition-colors"
+                            >
+                              Try again
+                            </button>
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Divider */}
+                      <div className="flex items-center gap-3 my-4">
+                        <div className="flex-1 h-px bg-white/10" />
+                        <span className="text-xs text-gray-500 uppercase tracking-wider">or login with credentials</span>
+                        <div className="flex-1 h-px bg-white/10" />
+                      </div>
+                    </div>
+                  )}
 
                   <form onSubmit={handleLogin} className="space-y-4">
                     {/* Email */}

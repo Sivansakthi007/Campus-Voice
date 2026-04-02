@@ -20,6 +20,8 @@ class User(Base):
     student_id = Column(String(100), nullable=True)
     staff_id = Column(String(100), nullable=True)
     staff_role = Column(String(100), nullable=True)
+    face_embedding = Column(JSON, nullable=True)  # 128-dim float array from face-api.js
+    face_enabled = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

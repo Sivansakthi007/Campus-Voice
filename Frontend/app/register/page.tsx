@@ -21,9 +21,17 @@ import {
   UserPlus,
   Hash,
   Building2,
-    Briefcase,
+  Briefcase,
+  ScanFace,
 } from "lucide-react"
 import { USER_ROLES, ROLE_COLORS, STAFF_ROLES, type UserRole } from "@/lib/constants"
+import dynamic from "next/dynamic"
+
+// Dynamically import FaceCaptureComponent (it uses browser APIs)
+const FaceCaptureComponent = dynamic(
+  () => import("@/components/FaceCaptureComponent"),
+  { ssr: false }
+)
 
 // Use the same backend URL as the API client for production deployments
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "https://campus-voice-backend-cr0o.onrender.com";
@@ -47,6 +55,12 @@ const PASSWORD_PROTECTED_ROLES: Set<string> = new Set([
   USER_ROLES.ADMIN,
 ])
 
+// Roles eligible for face recognition
+const FACE_RECOGNITION_ROLES: Set<string> = new Set([
+  USER_ROLES.ADMIN,
+  USER_ROLES.PRINCIPAL,
+])
+
 // Roles where the Department field must be removed because they operate at the institution level.
 const INSTITUTIONAL_STAFF_ROLES = new Set([
   "Librarian",
@@ -58,7 +72,6 @@ const INSTITUTIONAL_STAFF_ROLES = new Set([
   "Warden",
 ]);
 
-// ── Animation variants ──────────────────────────────────────────────
 // ── Component ───────────────────────────────────────────────────────
 export default function RegisterPage() {
   const router = useRouter()
@@ -85,6 +98,10 @@ export default function RegisterPage() {
   const [verifiedPassword, setVerifiedPassword] = useState("")
   const [signupApproval, setSignupApproval] = useState<SignupApprovalMap>({})
 
+  // Face recognition state
+  const [faceEnabled, setFaceEnabled] = useState(false)
+  const [faceEmbedding, setFaceEmbedding] = useState<number[] | null>(null)
+
   // Fetch signup approval status on mount
   useEffect(() => {
     const fetchApproval = async () => {
@@ -98,6 +115,12 @@ export default function RegisterPage() {
     }
     fetchApproval()
   }, [])
+
+  // Reset face state when role changes
+  useEffect(() => {
+    setFaceEnabled(false)
+    setFaceEmbedding(null)
+  }, [selectedRole])
 
   const handleRoleSelect = (role: UserRole) => {
     // Check signup approval
@@ -211,6 +234,10 @@ export default function RegisterPage() {
           ...(PASSWORD_PROTECTED_ROLES.has(selectedRole)
             ? { registration_password: verifiedPassword }
             : {}),
+          // Include face embedding if enabled
+          ...(faceEnabled && faceEmbedding
+            ? { face_embedding: faceEmbedding }
+            : {}),
         }),
       })
 
@@ -221,7 +248,11 @@ export default function RegisterPage() {
         return
       }
 
-      toast.success("Account created successfully!")
+      if (faceEnabled && faceEmbedding) {
+        toast.success("Account created with face recognition enabled! 🎉")
+      } else {
+        toast.success("Account created successfully!")
+      }
 
       setTimeout(() => {
         router.push(`/login?role=${selectedRole}`)
@@ -230,6 +261,8 @@ export default function RegisterPage() {
       toast.error("Server error. Please try again")
     }
   }
+
+  const showFaceOption = selectedRole && FACE_RECOGNITION_ROLES.has(selectedRole)
 
   return (
     <div
@@ -506,6 +539,71 @@ export default function RegisterPage() {
                         </button>
                       </div>
                     </div>
+
+                    {/* ═══ FACE RECOGNITION TOGGLE (Admin/Principal only) ═══ */}
+                    {showFaceOption && (
+                      <div className="pt-2">
+                        <div className="rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden">
+                          {/* Toggle Header */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (faceEnabled) {
+                                setFaceEnabled(false)
+                                setFaceEmbedding(null)
+                              } else {
+                                setFaceEnabled(true)
+                              }
+                            }}
+                            className="w-full flex items-center justify-between p-4 hover:bg-white/[0.02] transition-colors"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${faceEnabled ? `bg-gradient-to-br ${ROLE_COLORS[selectedRole].gradient}` : 'bg-white/10'} transition-all duration-300`}>
+                                <ScanFace className={`w-5 h-5 ${faceEnabled ? 'text-white' : 'text-gray-400'} transition-colors`} />
+                              </div>
+                              <div className="text-left">
+                                <p className="text-sm font-medium text-white">Enable Face Recognition</p>
+                                <p className="text-[11px] text-gray-500">Optional · Login with your face</p>
+                              </div>
+                            </div>
+                            {/* Toggle Switch */}
+                            <div
+                              className={`relative w-11 h-6 rounded-full transition-colors duration-300 ${
+                                faceEnabled
+                                  ? 'bg-gradient-to-r ' + ROLE_COLORS[selectedRole].gradient
+                                  : 'bg-white/15'
+                              }`}
+                            >
+                              <div
+                                className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-md transition-transform duration-300 ${
+                                  faceEnabled ? 'translate-x-5' : 'translate-x-0'
+                                }`}
+                              />
+                            </div>
+                          </button>
+
+                          {/* Face Capture Area */}
+                          {faceEnabled && (
+                            <div className="px-4 pb-4 pt-1">
+                              <FaceCaptureComponent
+                                mode="register"
+                                accentGradient={ROLE_COLORS[selectedRole].gradient}
+                                onCapture={(embedding) => {
+                                  setFaceEmbedding(embedding)
+                                  toast.success("Face captured! It will be saved with your account.")
+                                }}
+                                onClear={() => setFaceEmbedding(null)}
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Optional label */}
+                        <p className="text-[11px] text-gray-500 mt-2 text-center">
+                          Face login is optional. You can still use email & password.
+                        </p>
+                      </div>
+                    )}
 
                     {/* Action Buttons */}
                     <div className="flex gap-3 pt-4">

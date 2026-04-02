@@ -33,6 +33,7 @@ interface RegisterRequest {
   student_id?: string
   staff_role?: string
   registration_password?: string
+  face_embedding?: number[]  // 128-dim face descriptor (optional)
 }
 
 interface TokenResponse {
@@ -889,6 +890,39 @@ class ApiClient {
     const res = await fetch(url, { cache: "no-store" })
     const data = await res.json()
     return data.data || {}
+  }
+
+  // ===== FACE RECOGNITION METHODS =====
+
+  async registerFace(embedding: number[]): Promise<void> {
+    await this.request("/api/auth/face/register", {
+      method: "POST",
+      body: JSON.stringify({ embedding }),
+    })
+  }
+
+  async loginWithFace(embedding: number[]): Promise<TokenResponse> {
+    const response = await this.request<TokenResponse & { confidence: number }>("/api/auth/face/login", {
+      method: "POST",
+      body: JSON.stringify({ embedding }),
+    })
+
+    if (response.success && response.data.access_token) {
+      this.setToken(response.data.access_token)
+    }
+
+    return response.data
+  }
+
+  async removeFace(): Promise<void> {
+    await this.request("/api/auth/face/remove", {
+      method: "DELETE",
+    })
+  }
+
+  async getFaceStatus(): Promise<{ face_enabled: boolean; role: string }> {
+    const response = await this.request<{ face_enabled: boolean; role: string }>("/api/auth/face/status")
+    return response.data
   }
 
   // Token management

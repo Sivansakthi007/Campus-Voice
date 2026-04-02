@@ -306,6 +306,31 @@ async def startup():
             except Exception as migration_err:
                 logger.warning(f"Migration check for escalation columns: {str(migration_err)}")
 
+            # Safe migration: add face_embedding and face_enabled columns to users
+            try:
+                async with engine.begin() as conn:
+                    result = await conn.execute(text(
+                        "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
+                        "WHERE TABLE_NAME = 'users' AND COLUMN_NAME = 'face_embedding'"
+                    ))
+                    if result.fetchone() is None:
+                        await conn.execute(text(
+                            "ALTER TABLE users ADD COLUMN face_embedding JSON NULL"
+                        ))
+                        logger.info("Migration: Added 'face_embedding' column to users table")
+                    
+                    result = await conn.execute(text(
+                        "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
+                        "WHERE TABLE_NAME = 'users' AND COLUMN_NAME = 'face_enabled'"
+                    ))
+                    if result.fetchone() is None:
+                        await conn.execute(text(
+                            "ALTER TABLE users ADD COLUMN face_enabled BOOLEAN DEFAULT FALSE"
+                        ))
+                        logger.info("Migration: Added 'face_enabled' column to users table")
+            except Exception as migration_err:
+                logger.warning(f"Migration check for face columns: {str(migration_err)}")
+
             # Seed signup_approval_settings with defaults (all roles enabled)
             try:
                 async with engine.begin() as conn:
@@ -466,6 +491,14 @@ class UserCreate(BaseModel):
     staff_id: Optional[str] = None
     staff_role: Optional[str] = None
     registration_password: Optional[str] = None
+    face_embedding: Optional[List[float]] = None  # 128-dim face descriptor
+
+# Face Recognition Models
+class FaceRegisterRequest(BaseModel):
+    embedding: List[float] = Field(..., min_length=128, max_length=128)
+
+class FaceLoginRequest(BaseModel):
+    embedding: List[float] = Field(..., min_length=128, max_length=128)
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -695,6 +728,19 @@ def create_access_token(data: dict) -> str:
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
     return encoded_jwt
 
+# ===== FACE RECOGNITION HELPERS =====
+FACE_MATCH_THRESHOLD = 0.6  # Cosine similarity threshold for face matching
+
+def cosine_similarity(a: list, b: list) -> float:
+    """Compute cosine similarity between two face embeddings."""
+    import numpy as np
+    a_arr, b_arr = np.array(a, dtype=np.float64), np.array(b, dtype=np.float64)
+    dot_product = np.dot(a_arr, b_arr)
+    norm_a, norm_b = np.linalg.norm(a_arr), np.linalg.norm(b_arr)
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return float(dot_product / (norm_a * norm_b))
+
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), session: AsyncSession = Depends(get_session)) -> dict:
     try:
         token = credentials.credentials
@@ -917,6 +963,15 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_se
     # Principal, Admin, and Institutional staff roles should not have a department
     effective_department = None if (user_data.role in (UserRole.PRINCIPAL, UserRole.ADMIN) or is_institutional) else user_data.department
     
+    # Handle optional face embedding during registration
+    face_embedding_data = None
+    face_enabled_flag = False
+    if user_data.face_embedding and len(user_data.face_embedding) == 128:
+        if user_data.role in (UserRole.ADMIN, UserRole.PRINCIPAL):
+            face_embedding_data = user_data.face_embedding
+            face_enabled_flag = True
+            logger.info(f"Face embedding captured during registration for {user_data.email}")
+
     try:
         user_obj = User(
             email=user_data.email,
@@ -926,7 +981,9 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_se
             department=effective_department,
             student_id=user_data.student_id if is_student else None,
             staff_id=user_data.staff_id if not is_student else None,
-            staff_role=user_data.staff_role if user_data.role != UserRole.STUDENT else None
+            staff_role=user_data.staff_role if user_data.role != UserRole.STUDENT else None,
+            face_embedding=face_embedding_data,
+            face_enabled=face_enabled_flag
         )
         session.add(user_obj)
         await session.commit()
@@ -995,6 +1052,119 @@ async def login(credentials: UserLogin, session: AsyncSession = Depends(get_sess
 @api_router.get("/auth/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
     return create_response(True, "Profile retrieved successfully", current_user)
+
+# ===== FACE RECOGNITION ENDPOINTS =====
+
+@api_router.post("/auth/face/register")
+async def register_face(
+    data: FaceRegisterRequest,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Register face embedding for the authenticated user (Admin/Principal only)."""
+    if current_user["role"] not in (UserRole.ADMIN, UserRole.PRINCIPAL):
+        return create_response(False, "Face recognition is only available for Admin and Principal roles", status_code=403)
+
+    user_obj = await session.get(User, current_user["id"])
+    if not user_obj:
+        return create_response(False, "User not found", status_code=404)
+
+    user_obj.face_embedding = data.embedding
+    user_obj.face_enabled = True
+    await session.commit()
+    logger.info(f"Face registered for user {current_user['id']} ({current_user['role']})")
+    return create_response(True, "Face registered successfully")
+
+
+@api_router.post("/auth/face/login")
+async def face_login(
+    data: FaceLoginRequest,
+    session: AsyncSession = Depends(get_session)
+):
+    """Attempt face-based login by comparing embedding against all registered face embeddings."""
+    # Fetch all users with face enabled (Admin/Principal only)
+    stmt = select(User).where(
+        User.face_enabled == True,
+        User.face_embedding.isnot(None),
+        User.role.in_([UserRole.ADMIN, UserRole.PRINCIPAL])
+    )
+    res = await session.execute(stmt)
+    users_with_face = res.scalars().all()
+
+    if not users_with_face:
+        return create_response(False, "No face data registered. Please login manually.", status_code=404)
+
+    best_match = None
+    best_score = 0.0
+
+    for user_obj in users_with_face:
+        try:
+            score = cosine_similarity(data.embedding, user_obj.face_embedding)
+            if score > best_score:
+                best_score = score
+                best_match = user_obj
+        except Exception as e:
+            logger.warning(f"Error comparing face for user {user_obj.id}: {str(e)}")
+            continue
+
+    if best_match and best_score >= FACE_MATCH_THRESHOLD:
+        access_token = create_access_token({"sub": best_match.id})
+        is_student_role = best_match.role == UserRole.STUDENT
+        user_response = UserResponse(
+            id=best_match.id,
+            email=best_match.email,
+            name=best_match.name,
+            role=best_match.role,
+            department=None if (best_match.role in (UserRole.PRINCIPAL, UserRole.ADMIN) or best_match.staff_role in INSTITUTIONAL_STAFF_ROLES) else best_match.department,
+            student_id=best_match.student_id if is_student_role else None,
+            staff_id=best_match.staff_id if not is_student_role else None,
+            staff_role=best_match.staff_role,
+            created_at=best_match.created_at.isoformat() if best_match.created_at else None
+        )
+        logger.info(f"Face login successful for user {best_match.id} (score: {best_score:.3f})")
+        return create_response(True, "Face login successful", {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": user_response.model_dump(),
+            "confidence": round(best_score, 3)
+        })
+    else:
+        logger.info(f"Face login failed. Best score: {best_score:.3f} (threshold: {FACE_MATCH_THRESHOLD})")
+        return create_response(False, "Face not recognized. Please login manually.", status_code=401)
+
+
+@api_router.delete("/auth/face/remove")
+async def remove_face(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Remove face data for the authenticated user."""
+    user_obj = await session.get(User, current_user["id"])
+    if not user_obj:
+        return create_response(False, "User not found", status_code=404)
+
+    user_obj.face_embedding = None
+    user_obj.face_enabled = False
+    await session.commit()
+    logger.info(f"Face data removed for user {current_user['id']}")
+    return create_response(True, "Face data removed successfully")
+
+
+@api_router.get("/auth/face/status")
+async def face_status(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Check if the current user has face recognition enabled."""
+    user_obj = await session.get(User, current_user["id"])
+    if not user_obj:
+        return create_response(False, "User not found", status_code=404)
+
+    return create_response(True, "Face status retrieved", {
+        "face_enabled": bool(user_obj.face_enabled),
+        "role": user_obj.role
+    })
+
 
 
 @api_router.get("/users")
