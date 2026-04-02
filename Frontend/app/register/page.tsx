@@ -265,17 +265,21 @@ export default function RegisterPage() {
   const showFaceOption = selectedRole && FACE_RECOGNITION_ROLES.has(selectedRole)
 
   return (
-    <div
-      className="relative min-h-screen w-full"
-      style={{
-        backgroundImage: "url('/campus-auth-bg.png')",
-        backgroundSize: "cover",
+    <div className="relative min-h-screen w-full">
+      {/* Background image with dimmed filter — positioned absolutely behind everything */}
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage: "url('/campus-auth-bg.png')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          backgroundAttachment: "fixed",
+          filter: "brightness(1.0) contrast(1.1) saturate(1.0)",
+          zIndex: 0,
+        }}
+      />
 
-        backgroundPosition: "center",
-        backgroundRepeat: "no-repeat",
-        backgroundAttachment: "fixed",
-      }}
-    >
       {/* Dark overlay for content visibility */}
       <div className="auth-overlay" />
 
@@ -313,21 +317,18 @@ export default function RegisterPage() {
           <div>
             {/* Title animations */}
             <h1
-              className="text-4xl md:text-5xl font-bold text-white mb-3 text-center"
-              style={{
-                textShadow: "0 0 40px rgba(99, 102, 241, 0.15)",
-              }}
+              className="text-4xl md:text-5xl font-bold text-white mb-3 text-center auth-heading-glow"
             >
               Create Your Account
             </h1>
-            <p className="text-gray-400 text-center mb-8 text-lg">
+            <p className="auth-subtext text-center mb-8 text-lg">
               Choose your role and get started
             </p>
 
             {/* Role Selection & Form */}
             {!selectedRole && (
-              <div className="max-w-4xl mx-auto">
-                <p className="text-center text-gray-300 mb-6 text-sm md:text-lg">
+              <div className="max-w-4xl mx-auto glass-role-panel">
+                <p className="text-center auth-subtext mb-6 text-sm md:text-lg">
                   Select your role to continue
                 </p>
                 <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4 mb-4">
@@ -405,7 +406,7 @@ export default function RegisterPage() {
                   <form onSubmit={handleRegister} className="space-y-4">
                     {/* Full Name */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">Full Name</label>
+                      <label className="block text-sm auth-label mb-2">Full Name</label>
                       <div className="relative group">
                         <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-blue-400 transition-colors" />
                         <input
@@ -421,7 +422,7 @@ export default function RegisterPage() {
 
                     {/* Email */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">Email Address</label>
+                      <label className="block text-sm auth-label mb-2">Email Address</label>
                       <div className="relative group">
                         <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-blue-400 transition-colors" />
                         <input
@@ -437,27 +438,27 @@ export default function RegisterPage() {
 
                     {/* Department (conditional) */}
                     {selectedRole !== USER_ROLES.PRINCIPAL &&
-                     selectedRole !== USER_ROLES.ADMIN &&
-                     !(selectedRole === USER_ROLES.STAFF && INSTITUTIONAL_STAFF_ROLES.has(formData.staffRole)) && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">Department</label>
-                        <div className="relative group">
-                          <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-blue-400 transition-colors" />
-                          <input
-                            type="text"
-                            required
-                            value={formData.department}
-                            onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                            className="w-full pl-11 pr-4 py-3 glass-input"
-                            placeholder="Enter your department"
-                          />
+                      selectedRole !== USER_ROLES.ADMIN &&
+                      !(selectedRole === USER_ROLES.STAFF && INSTITUTIONAL_STAFF_ROLES.has(formData.staffRole)) && (
+                        <div>
+                          <label className="block text-sm auth-label mb-2">Department</label>
+                          <div className="relative group">
+                            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-blue-400 transition-colors" />
+                            <input
+                              type="text"
+                              required
+                              value={formData.department}
+                              onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                              className="w-full pl-11 pr-4 py-3 glass-input"
+                              placeholder="Enter your department"
+                            />
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
                     {/* Student/Staff ID */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className="block text-sm auth-label mb-2">
                         {selectedRole === USER_ROLES.STUDENT ? "Student ID" : "Staff ID"}
                       </label>
                       <div className="relative group">
@@ -476,7 +477,7 @@ export default function RegisterPage() {
                     {/* Staff Role (only for staff) */}
                     {selectedRole === USER_ROLES.STAFF && (
                       <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">Staff Role</label>
+                        <label className="block text-sm auth-label mb-2">Staff Role</label>
                         <div className="relative group">
                           <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-blue-400 transition-colors" />
                           <select
@@ -496,7 +497,7 @@ export default function RegisterPage() {
 
                     {/* Password */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">Password</label>
+                      <label className="block text-sm auth-label mb-2">Password</label>
                       <div className="relative group">
                         <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-blue-400 transition-colors" />
                         <input
@@ -519,7 +520,7 @@ export default function RegisterPage() {
 
                     {/* Confirm Password */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">Confirm Password</label>
+                      <label className="block text-sm auth-label mb-2">Confirm Password</label>
                       <div className="relative group">
                         <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-blue-400 transition-colors" />
                         <input
@@ -568,16 +569,14 @@ export default function RegisterPage() {
                             </div>
                             {/* Toggle Switch */}
                             <div
-                              className={`relative w-11 h-6 rounded-full transition-colors duration-300 ${
-                                faceEnabled
-                                  ? 'bg-gradient-to-r ' + ROLE_COLORS[selectedRole].gradient
-                                  : 'bg-white/15'
-                              }`}
+                              className={`relative w-11 h-6 rounded-full transition-colors duration-300 ${faceEnabled
+                                ? 'bg-gradient-to-r ' + ROLE_COLORS[selectedRole].gradient
+                                : 'bg-white/15'
+                                }`}
                             >
                               <div
-                                className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-md transition-transform duration-300 ${
-                                  faceEnabled ? 'translate-x-5' : 'translate-x-0'
-                                }`}
+                                className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-md transition-transform duration-300 ${faceEnabled ? 'translate-x-5' : 'translate-x-0'
+                                  }`}
                               />
                             </div>
                           </button>
@@ -627,7 +626,7 @@ export default function RegisterPage() {
                   </form>
 
                   {/* Login Link */}
-                  <p className="text-center text-sm text-gray-400 mt-6">
+                  <p className="text-center text-sm auth-footer-text mt-6">
                     Already have an account?{" "}
                     <button
                       onClick={() => router.push("/login")}
