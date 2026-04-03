@@ -80,11 +80,11 @@ export function NotificationBell({ role }: NotificationBellProps) {
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -10, scale: 0.95 }}
                         transition={{ duration: 0.15 }}
-                        className="absolute right-0 top-full mt-2 w-80 sm:w-96 max-h-[420px] glass-card rounded-2xl border border-white/10 shadow-2xl z-50 overflow-hidden"
+                        className="fixed lg:absolute inset-x-4 lg:inset-x-auto lg:right-0 top-20 lg:top-full lg:mt-2 w-auto lg:w-96 max-h-[calc(100vh-120px)] lg:max-h-[420px] glass-card rounded-2xl border border-white/10 shadow-2xl z-[100] overflow-hidden"
                         id="notification-panel"
                     >
                         {/* Panel Header */}
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                        <div className="flex items-center justify-between px-3 py-2.5 lg:px-4 lg:py-3 border-b border-white/10 bg-white/5">
                             <div className="flex items-center gap-2">
                                 <Bell className="w-4 h-4 text-blue-400" />
                                 <h3 className="text-sm font-semibold text-white">Notifications</h3>
@@ -96,14 +96,14 @@ export function NotificationBell({ role }: NotificationBellProps) {
                             </div>
                             <button
                                 onClick={() => setIsOpen(false)}
-                                className="p-1 rounded-lg hover:bg-white/10 transition-colors"
+                                className="p-1.5 lg:p-1 rounded-lg hover:bg-white/10 transition-colors"
                             >
                                 <X className="w-4 h-4 text-gray-400" />
                             </button>
                         </div>
 
                         {/* Notification List */}
-                        <div className="overflow-y-auto max-h-[360px] divide-y divide-white/5">
+                        <div className="overflow-y-auto max-h-[calc(100vh-200px)] lg:max-h-[360px] divide-y divide-white/5 scrollbar-thin scrollbar-thumb-white/10">
                             {notifications.length === 0 ? (
                                 <div className="py-12 text-center">
                                     <Bell className="w-8 h-8 text-gray-600 mx-auto mb-2" />
@@ -114,7 +114,7 @@ export function NotificationBell({ role }: NotificationBellProps) {
                                     <button
                                         key={notification.id}
                                         onClick={() => handleNotificationClick(notification)}
-                                        className={`w-full text-left px-4 py-3 hover:bg-white/5 transition-all group ${!notification.is_read ? "bg-blue-500/5" : ""
+                                        className={`w-full text-left px-3 py-3 lg:px-4 lg:py-3 hover:bg-white/5 transition-all group ${!notification.is_read ? "bg-blue-500/5" : ""
                                             }`}
                                         id={`notification-item-${notification.id}`}
                                     >
@@ -129,13 +129,13 @@ export function NotificationBell({ role }: NotificationBellProps) {
                                             </div>
 
                                             <div className="flex-1 min-w-0">
-                                                <p className={`text-sm font-medium truncate ${!notification.is_read ? "text-white" : "text-gray-400"}`}>
+                                                <p className={`text-sm font-medium leading-tight ${!notification.is_read ? "text-white" : "text-gray-400"}`}>
                                                     {notification.title}
                                                 </p>
-                                                <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">
+                                                <p className="text-xs text-gray-500 mt-1 line-clamp-2">
                                                     {notification.message}
                                                 </p>
-                                                <div className="flex items-center justify-between mt-1.5">
+                                                <div className="flex items-center justify-between mt-2">
                                                     {notification.category && (
                                                         <span className="text-[10px] px-1.5 py-0.5 bg-violet-500/10 text-violet-400 rounded-full font-medium">
                                                             {notification.category}
@@ -147,7 +147,7 @@ export function NotificationBell({ role }: NotificationBellProps) {
                                                 </div>
                                             </div>
 
-                                            <ExternalLink className="w-3.5 h-3.5 text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity mt-1 flex-shrink-0" />
+                                            <ExternalLink className="w-3.5 h-3.5 text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity mt-1 flex-shrink-0 hidden lg:block" />
                                         </div>
                                     </button>
                                 ))
