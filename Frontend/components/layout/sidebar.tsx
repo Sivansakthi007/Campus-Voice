@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   Lightbulb,
   UserCheck,
+  Hash,
 } from "lucide-react"
 import { USER_ROLES, ROLE_COLORS, type UserRole } from "@/lib/constants"
 import { mockStorage } from "@/lib/mock-data"
@@ -77,6 +78,7 @@ const SIDEBAR_ITEMS = {
     { icon: List, label: "All Complaints", path: "/complaints" },
     { icon: Users, label: "User Management", path: "/users" },
     { icon: UserCheck, label: "Signup Approval", path: "/signup-approval" },
+    { icon: Hash, label: "User Count Limits", path: "/user-count-management" },
     { icon: BarChart3, label: "Analytics", path: "/analytics" },
     { icon: User, label: "Profile", path: "/profile" },
     { icon: Settings, label: "Settings", path: "/settings" },

@@ -10,7 +10,7 @@ from pathlib import Path
 from sqlalchemy import select, func, text, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_engine, get_session, Base
-from models import User, Complaint, StaffRating, HODRating, HODReportToggle, Notification, Suggestion, SuggestionVote, SignupApprovalSetting
+from models import User, Complaint, StaffRating, HODRating, HODReportToggle, Notification, Suggestion, SuggestionVote, SignupApprovalSetting, UserLimit
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Dict, Any
 from enum import Enum
@@ -348,6 +348,24 @@ async def startup():
                 logger.info("Migration: signup_approval_settings seeded")
             except Exception as migration_err:
                 logger.warning(f"Seeding signup_approval_settings: {str(migration_err)}")
+
+            # Seed user_limits with defaults (max_count=0 means unlimited)
+            try:
+                async with engine.begin() as conn:
+                    from sqlalchemy.ext.asyncio import AsyncSession as _AS2
+                    from sqlalchemy.orm import sessionmaker as _sm2
+                    _sf2 = _sm2(engine, class_=_AS2, expire_on_commit=False)
+                    async with _sf2() as _sess2:
+                        for _role in ["student", "staff", "hod", "principal"]:
+                            exists = (await _sess2.execute(
+                                select(UserLimit).where(UserLimit.role == _role)
+                            )).scalars().first()
+                            if not exists:
+                                _sess2.add(UserLimit(role=_role, max_count=0))
+                        await _sess2.commit()
+                logger.info("Migration: user_limits seeded")
+            except Exception as migration_err:
+                logger.warning(f"Seeding user_limits: {str(migration_err)}")
 
             logger.info("Database connection established successfully!")
             return
@@ -922,6 +940,23 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_se
                 status_code=403
             )
 
+    # ── User Count Limit check ──
+    if signup_role in ("student", "staff", "hod", "principal"):
+        limit_row = (await session.execute(
+            select(UserLimit).where(UserLimit.role == signup_role)
+        )).scalars().first()
+        if limit_row and limit_row.max_count > 0:
+            current_count_result = await session.execute(
+                select(func.count()).select_from(User).where(User.role == signup_role)
+            )
+            current_count = current_count_result.scalar() or 0
+            if current_count >= limit_row.max_count:
+                return create_response(
+                    False,
+                    "Registration limit reached for this role. Contact admin.",
+                    status_code=403
+                )
+
     # Check if user exists
     stmt = select(User).where(User.email == user_data.email)
     res = await session.execute(stmt)
@@ -1289,6 +1324,92 @@ async def get_signup_approval_status(session: AsyncSession = Depends(get_session
     data = {s.role: s.is_enabled for s in settings}
     return create_response(True, "Signup approval status", data)
 
+
+# ===== USER COUNT LIMIT ENDPOINTS =====
+
+class UserLimitUpdate(BaseModel):
+    """Request body for updating user count limits."""
+    student: Optional[int] = None
+    staff: Optional[int] = None
+    hod: Optional[int] = None
+    principal: Optional[int] = None
+
+
+@api_router.get("/admin/user-limits")
+async def get_user_limits(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get user count limits and current counts per role (Admin only)."""
+    if current_user["role"] != UserRole.ADMIN:
+        return create_response(False, "Permission denied", status_code=403)
+
+    # Get limits
+    limits_result = await session.execute(select(UserLimit))
+    limits = {lim.role: lim.max_count for lim in limits_result.scalars().all()}
+
+    # Get current counts per role
+    count_result = await session.execute(
+        select(User.role, func.count()).group_by(User.role)
+    )
+    counts = {row[0]: row[1] for row in count_result.all()}
+
+    data = {}
+    for role in ["student", "staff", "hod", "principal"]:
+        data[role] = {
+            "max_count": limits.get(role, 0),
+            "current_count": counts.get(role, 0),
+        }
+
+    return create_response(True, "User limits retrieved", data)
+
+
+@api_router.put("/admin/user-limits")
+async def update_user_limits(
+    body: UserLimitUpdate,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Update user count limits per role (Admin only). Set to 0 for unlimited."""
+    if current_user["role"] != UserRole.ADMIN:
+        return create_response(False, "Permission denied", status_code=403)
+
+    updates = body.model_dump(exclude_none=True)
+    if not updates:
+        return create_response(False, "No limits provided", status_code=400)
+
+    for role_name, max_count in updates.items():
+        if max_count < 0:
+            return create_response(False, f"Invalid limit for {role_name}: must be >= 0", status_code=400)
+        limit_row = (await session.execute(
+            select(UserLimit).where(UserLimit.role == role_name)
+        )).scalars().first()
+        if limit_row:
+            limit_row.max_count = max_count
+            limit_row.updated_by = current_user["id"]
+        else:
+            session.add(UserLimit(role=role_name, max_count=max_count, updated_by=current_user["id"]))
+
+    await session.commit()
+    logger.info(f"User limits updated by Admin {current_user['id']}: {updates}")
+
+    # Return fresh state with counts
+    limits_result = await session.execute(select(UserLimit))
+    limits = {lim.role: lim.max_count for lim in limits_result.scalars().all()}
+
+    count_result = await session.execute(
+        select(User.role, func.count()).group_by(User.role)
+    )
+    counts = {row[0]: row[1] for row in count_result.all()}
+
+    data = {}
+    for role in ["student", "staff", "hod", "principal"]:
+        data[role] = {
+            "max_count": limits.get(role, 0),
+            "current_count": counts.get(role, 0),
+        }
+
+    return create_response(True, "User limits updated", data)
 
 
 @api_router.post("/auth/upload-profile-photo")

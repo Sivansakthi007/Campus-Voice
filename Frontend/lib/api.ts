@@ -892,7 +892,28 @@ class ApiClient {
     return data.data || {}
   }
 
+  // ===== USER COUNT LIMIT METHODS =====
+
+  async getUserLimits(): Promise<Record<string, { max_count: number; current_count: number }>> {
+    const response = await this.request<Record<string, { max_count: number; current_count: number }>>("/api/admin/user-limits")
+    return response.data
+  }
+
+  async updateUserLimits(limits: {
+    student?: number
+    staff?: number
+    hod?: number
+    principal?: number
+  }): Promise<Record<string, { max_count: number; current_count: number }>> {
+    const response = await this.request<Record<string, { max_count: number; current_count: number }>>("/api/admin/user-limits", {
+      method: "PUT",
+      body: JSON.stringify(limits),
+    })
+    return response.data
+  }
+
   // ===== FACE RECOGNITION METHODS =====
+
 
   async registerFace(embedding: number[]): Promise<void> {
     await this.request("/api/auth/face/register", {

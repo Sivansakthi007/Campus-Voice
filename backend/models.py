@@ -187,3 +187,14 @@ class SignupApprovalSetting(Base):
     updated_by = Column(String(36), nullable=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+
+class UserLimit(Base):
+    """Admin-controlled maximum registration count per role."""
+    __tablename__ = "user_limits"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    role = Column(String(50), unique=True, nullable=False)  # student, staff, hod, principal
+    max_count = Column(Integer, nullable=False, default=0)  # 0 = unlimited
+    updated_by = Column(String(36), nullable=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
