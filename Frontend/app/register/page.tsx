@@ -57,8 +57,11 @@ const PASSWORD_PROTECTED_ROLES: Set<string> = new Set([
 
 // Roles eligible for face recognition
 const FACE_RECOGNITION_ROLES: Set<string> = new Set([
-  USER_ROLES.ADMIN,
+  USER_ROLES.STUDENT,
+  USER_ROLES.STAFF,
+  USER_ROLES.HOD,
   USER_ROLES.PRINCIPAL,
+  USER_ROLES.ADMIN,
 ])
 
 // Roles where the Department field must be removed because they operate at the institution level.

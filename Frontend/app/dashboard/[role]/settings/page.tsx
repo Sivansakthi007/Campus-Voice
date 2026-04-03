@@ -5,13 +5,20 @@ import React from "react"
 
 import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
-import { Bell, Lock, Moon, Sun, Shield } from "lucide-react"
+import { Bell, Lock, Moon, Sun, Shield, ScanFace, Trash2, Camera, User, Loader2 } from "lucide-react"
 import { Sidebar } from "@/components/layout/sidebar"
-import type { UserRole } from "@/lib/constants"
+import { USER_ROLES, ROLE_COLORS, type UserRole } from "@/lib/constants"
 import { mockStorage } from "@/lib/mock-data"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { useThemeToggle } from "@/hooks/use-theme-toggle"
+import { apiClient } from "@/lib/api"
+import dynamic from "next/dynamic"
+
+const FaceCaptureComponent = dynamic(
+  () => import("@/components/FaceCaptureComponent"),
+  { ssr: false }
+)
 
 
 export default function SettingsPage({ params }: { params: Promise<{ role: string }> }) {
@@ -31,12 +38,29 @@ export default function SettingsPage({ params }: { params: Promise<{ role: strin
     confirmPassword: "",
   })
 
+  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [showFaceCapture, setShowFaceCapture] = useState(false)
+  const [isRemovingFace, setIsRemovingFace] = useState(false)
+
   useEffect(() => {
-    const user = mockStorage.getUser()
-    if (!user || user.role !== role) {
-      router.push("/login")
-      return
+    const initSettings = async () => {
+      const user = mockStorage.getUser()
+      if (!user || user.role !== role) {
+        router.push("/login")
+        return
+      }
+
+      try {
+        const profileRes = await apiClient.getCurrentUser()
+        if (profileRes) {
+          setCurrentUser(profileRes)
+        }
+      } catch (error) {
+        console.error("Failed to fetch profile:", error)
+        setCurrentUser(user) // Fallback to mock data
+      }
     }
+    initSettings()
   }, [role, router])
 
   const toggleSetting = (key: keyof typeof settings) => {
@@ -60,6 +84,43 @@ export default function SettingsPage({ params }: { params: Promise<{ role: strin
     toast.success("Password changed successfully")
     setShowPasswordModal(false)
     setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" })
+  }
+
+  const handleRegisterFace = async (embedding: number[]) => {
+    try {
+      const res = await apiClient.registerFace(embedding)
+      if (res.success) {
+        toast.success("Face data updated successfully!")
+        setShowFaceCapture(false)
+        // Refresh profile
+        const profileRes = await apiClient.getCurrentUser()
+        if (profileRes) setCurrentUser(profileRes)
+      }
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to register face")
+    }
+  }
+
+  const handleRemoveFace = async () => {
+    if (!confirm("Are you sure you want to disable face login and remove your face data?")) return
+    
+    setIsRemovingFace(true)
+    try {
+      const res = await apiClient.removeFace()
+      
+      if (res.success) {
+        toast.success("Face login disabled")
+        // Refresh profile
+        const profileRes = await apiClient.getCurrentUser()
+        if (profileRes) setCurrentUser(profileRes)
+      } else {
+        toast.error(res.message || "Failed to remove face data")
+      }
+    } catch (error) {
+      toast.error("Server error. Please try again.")
+    } finally {
+      setIsRemovingFace(false)
+    }
   }
 
   return (
@@ -177,12 +238,82 @@ export default function SettingsPage({ params }: { params: Promise<{ role: strin
                 </div>
                 <button
                   onClick={() => setShowPasswordModal(true)}
-                  className="w-full flex items-center justify-center gap-3 glass-card rounded-xl p-4 hover:bg-white/10 transition-all"
+                  className="w-full flex items-center justify-center gap-3 glass-card rounded-xl p-4 hover:bg-white/10 transition-all font-medium text-white"
                 >
                   <Lock className="w-5 h-5 text-gray-400" />
-                  <span className="text-white font-medium">Change Password</span>
+                  <span>Change Password</span>
                 </button>
               </div>
+            </div>
+
+            {/* Face Recognition */}
+            <div className="glass-card rounded-2xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-semibold text-white">Face Recognition</h3>
+                <div className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${currentUser?.face_enabled ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-gray-500/10 text-gray-400 border border-gray-500/20'}`}>
+                  {currentUser?.face_enabled ? 'ENABLED' : 'DISABLED'}
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${currentUser?.face_enabled ? `bg-gradient-to-br ${ROLE_COLORS[role].gradient}` : 'bg-white/10'}`}>
+                    <ScanFace className={`w-5 h-5 ${currentUser?.face_enabled ? 'text-white' : 'text-gray-400'}`} />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-white font-medium">Automatic Face Login</p>
+                    <p className="text-sm text-gray-400">
+                      {currentUser?.face_enabled 
+                        ? "You can login automatically using face recognition." 
+                        : "Enable face recognition for a faster and more secure login experience."}
+                    </p>
+                  </div>
+                </div>
+
+                {!showFaceCapture ? (
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      onClick={() => setShowFaceCapture(true)}
+                      className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r ${ROLE_COLORS[role].gradient} text-white font-medium shadow-lg hover:shadow-xl transition-all active:scale-95`}
+                    >
+                      <Camera className="w-4 h-4" />
+                      {currentUser?.face_enabled ? "Update Face Data" : "Register Face"}
+                    </button>
+                    
+                    {currentUser?.face_enabled && (
+                      <button
+                        onClick={handleRemoveFace}
+                        disabled={isRemovingFace}
+                        className="px-4 py-3 rounded-xl border border-red-500/20 bg-red-500/5 text-red-400 hover:bg-red-500/10 transition-all active:scale-95 disabled:opacity-50"
+                      >
+                        {isRemovingFace ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="pt-2">
+                    <div className="flex items-center justify-between mb-3 px-1">
+                      <span className="text-sm font-medium text-white italic">Face Registration</span>
+                      <button 
+                        onClick={() => setShowFaceCapture(false)}
+                        className="text-xs text-gray-500 hover:text-white transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    <FaceCaptureComponent
+                      mode="register"
+                      accentGradient={ROLE_COLORS[role].gradient}
+                      onCapture={handleRegisterFace}
+                      onClear={() => {}}
+                    />
+                  </div>
+                )}
+              </div>
+              
+              <p className="text-[11px] text-gray-500 mt-4 text-center">
+                Face login is optional. You can still use email & password anytime. Your face data is stored securely as a mathematical embedding.
+              </p>
             </div>
           </div>
         </motion.div>

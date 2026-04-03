@@ -21,6 +21,7 @@ import jwt
 import base64
 import io
 from utils.rbac import require_roles, is_valid_transition
+from utils.encryption import face_encryption
 from functools import wraps
 
 logging.basicConfig(
@@ -517,6 +518,7 @@ class FaceRegisterRequest(BaseModel):
 
 class FaceLoginRequest(BaseModel):
     embedding: List[float] = Field(..., min_length=128, max_length=128)
+    role: str = Field(..., description="The role to authenticate for")
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -1002,10 +1004,10 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_se
     face_embedding_data = None
     face_enabled_flag = False
     if user_data.face_embedding and len(user_data.face_embedding) == 128:
-        if user_data.role in (UserRole.ADMIN, UserRole.PRINCIPAL):
-            face_embedding_data = user_data.face_embedding
-            face_enabled_flag = True
-            logger.info(f"Face embedding captured during registration for {user_data.email}")
+        # Encrypt face embedding before storage
+        face_embedding_data = face_encryption.encrypt(user_data.face_embedding)
+        face_enabled_flag = True
+        logger.info(f"Secure face embedding captured during registration for {user_data.email} ({user_data.role})")
 
     try:
         user_obj = User(
@@ -1084,6 +1086,23 @@ async def login(credentials: UserLogin, session: AsyncSession = Depends(get_sess
     }
     return create_response(True, "Login successful", data)
 
+
+@api_router.post("/auth/face/remove")
+async def remove_face_data(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Disable face recognition and remove embedding for the authenticated user."""
+    user_obj = await session.get(User, current_user["id"])
+    if not user_obj:
+        return create_response(False, "User not found", status_code=404)
+
+    user_obj.face_embedding = None
+    user_obj.face_enabled = False
+    await session.commit()
+    logger.info(f"Face data removed for user {current_user['id']} ({current_user['role']})")
+    return create_response(True, "Face recognition disabled and data removed")
+
 @api_router.get("/auth/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
     return create_response(True, "Profile retrieved successfully", current_user)
@@ -1096,18 +1115,20 @@ async def register_face(
     current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
-    """Register face embedding for the authenticated user (Admin/Principal only)."""
-    if current_user["role"] not in (UserRole.ADMIN, UserRole.PRINCIPAL):
-        return create_response(False, "Face recognition is only available for Admin and Principal roles", status_code=403)
+    """Register and enable face embedding for the authenticated user."""
+    # Now allowed for all authorized roles: student, staff, hod, principal, admin
+    valid_roles = [UserRole.STUDENT, UserRole.STAFF, UserRole.HOD, UserRole.PRINCIPAL, UserRole.ADMIN]
+    if current_user["role"] not in valid_roles:
+        return create_response(False, f"Face recognition is not permitted for role: {current_user['role']}", status_code=403)
 
     user_obj = await session.get(User, current_user["id"])
     if not user_obj:
         return create_response(False, "User not found", status_code=404)
 
-    user_obj.face_embedding = data.embedding
+    user_obj.face_embedding = face_encryption.encrypt(data.embedding)
     user_obj.face_enabled = True
     await session.commit()
-    logger.info(f"Face registered for user {current_user['id']} ({current_user['role']})")
+    logger.info(f"Secure face registered for user {current_user['id']} ({current_user['role']})")
     return create_response(True, "Face registered successfully")
 
 
@@ -1116,25 +1137,31 @@ async def face_login(
     data: FaceLoginRequest,
     session: AsyncSession = Depends(get_session)
 ):
-    """Attempt face-based login by comparing embedding against all registered face embeddings."""
-    # Fetch all users with face enabled (Admin/Principal only)
+    """Attempt role-based face login by comparing embedding against registered faces within the role."""
+    # Fetch users with face enabled that match the EXACT role selected
     stmt = select(User).where(
         User.face_enabled == True,
         User.face_embedding.isnot(None),
-        User.role.in_([UserRole.ADMIN, UserRole.PRINCIPAL])
+        User.role == data.role
     )
     res = await session.execute(stmt)
     users_with_face = res.scalars().all()
 
     if not users_with_face:
-        return create_response(False, "No face data registered. Please login manually.", status_code=404)
+        # Do NOT search across other roles as per requirements
+        return create_response(False, f"Face not recognized for the {data.role} role. Please login manually.", status_code=401)
 
     best_match = None
     best_score = 0.0
 
     for user_obj in users_with_face:
         try:
-            score = cosine_similarity(data.embedding, user_obj.face_embedding)
+            # Decrypt embedding from secure storage before comparison
+            stored_embedding = face_encryption.decrypt(user_obj.face_embedding)
+            if not stored_embedding:
+                continue
+
+            score = cosine_similarity(data.embedding, stored_embedding)
             if score > best_score:
                 best_score = score
                 best_match = user_obj
@@ -1156,7 +1183,7 @@ async def face_login(
             staff_role=best_match.staff_role,
             created_at=best_match.created_at.isoformat() if best_match.created_at else None
         )
-        logger.info(f"Face login successful for user {best_match.id} (score: {best_score:.3f})")
+        logger.info(f"Role-based face login successful for {best_match.role} {best_match.id} (score: {best_score:.3f})")
         return create_response(True, "Face login successful", {
             "access_token": access_token,
             "token_type": "bearer",
@@ -1164,8 +1191,8 @@ async def face_login(
             "confidence": round(best_score, 3)
         })
     else:
-        logger.info(f"Face login failed. Best score: {best_score:.3f} (threshold: {FACE_MATCH_THRESHOLD})")
-        return create_response(False, "Face not recognized. Please login manually.", status_code=401)
+        logger.info(f"Face login failed for role {data.role}. Best score: {best_score:.3f} (threshold: {FACE_MATCH_THRESHOLD})")
+        return create_response(False, f"Face not recognized for the selected role", status_code=401)
 
 
 @api_router.delete("/auth/face/remove")

@@ -12,12 +12,14 @@ import {
   X,
   Users,
   ShieldCheck,
+  Eye,
 } from "lucide-react"
 import {
   loadFaceModels,
   detectFace,
   stopCamera,
   drawFaceBox,
+  checkLiveness,
   type FaceDetectionResult,
 } from "@/lib/face-recognition"
 
@@ -66,6 +68,7 @@ export default function FaceCaptureComponent({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const detectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const livenessRef = useRef<{ results: FaceDetectionResult[], startTime: number }>({ results: [], startTime: 0 })
 
   const [cameraState, setCameraState] = useState<CameraState>("idle")
   const [detectionState, setDetectionState] = useState<DetectionState>("none")
@@ -73,6 +76,8 @@ export default function FaceCaptureComponent({
   const [capturedEmbedding, setCapturedEmbedding] = useState<number[] | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [modelsReady, setModelsReady] = useState(false)
+  const [livenessProgress, setLivenessProgress] = useState(0) // 0 to 100
+  const [isLivenessVerified, setIsLivenessVerified] = useState(false)
 
   // Load models on mount
   useEffect(() => {
@@ -182,10 +187,8 @@ export default function FaceCaptureComponent({
       const result = await detectFace(video)
       setLastResult(result)
 
-      // Re-check refs after async call (component may have unmounted)
       if (!videoRef.current || !canvasRef.current) return
 
-      // Draw face box overlay
       let boxStatus: "detecting" | "found" | "multiple" | "none" = "none"
       if (result.faceCount === 1) boxStatus = "found"
       else if (result.faceCount > 1) boxStatus = "multiple"
@@ -195,16 +198,43 @@ export default function FaceCaptureComponent({
 
       if (result.faceCount === 1 && result.embedding) {
         setDetectionState("found")
-        // In login mode, automatically fire event
-        if (mode === "login" && onFaceDetected && !isProcessing) {
-          onFaceDetected(result.embedding)
+        
+        // ── LIVENESS LOGIC ──
+        const now = Date.now()
+        if (livenessRef.current.startTime === 0) {
+          livenessRef.current.startTime = now
+          livenessRef.current.results = [result]
+          setLivenessProgress(10)
+        } else {
+          // Check for movement compared to previous results
+          const history = livenessRef.current.results
+          const hasMovement = history.some(prev => checkLiveness(prev, result, 5)) // Low threshold for subtle movement
+          
+          if (hasMovement || history.length > 5) {
+            livenessRef.current.results.push(result)
+            if (livenessRef.current.results.length > 10) livenessRef.current.results.shift()
+            
+            const elapsed = now - livenessRef.current.startTime
+            const progress = Math.min(100, (elapsed / 1500) * 100) // 1.5s for full verification
+            setLivenessProgress(progress)
+
+            if (progress >= 100 && (hasMovement || history.length > 8)) {
+              setIsLivenessVerified(true)
+              // In login mode, automatically fire event ONLY after liveness check
+              if (mode === "login" && onFaceDetected && !isProcessing) {
+                onFaceDetected(result.embedding)
+              }
+            }
+          }
         }
-      } else if (result.faceCount > 1) {
-        setDetectionState("multiple")
       } else {
-        setDetectionState("detecting")
+        // Reset liveness if face lost
+        livenessRef.current = { results: [], startTime: 0 }
+        setLivenessProgress(0)
+        setIsLivenessVerified(false)
+        setDetectionState(result.faceCount > 1 ? "multiple" : "detecting")
       }
-    }, 500) // Detect every 500ms
+    }, 200) // Faster detection for liveness (200ms)
   }
 
   const handleCapture = () => {
@@ -232,6 +262,9 @@ export default function FaceCaptureComponent({
     setDetectionState("none")
     setLastResult(null)
     setCapturedEmbedding(null)
+    setLivenessProgress(0)
+    setIsLivenessVerified(false)
+    livenessRef.current = { results: [], startTime: 0 }
     onClear?.()
   }
 
@@ -351,7 +384,12 @@ export default function FaceCaptureComponent({
           >
             {detectionState === "found" ? (
               <>
-                <Check className="w-3 h-3" /> Face Detected
+                {isLivenessVerified ? (
+                  <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                ) : (
+                  <Eye className="w-3 h-3 animate-pulse text-amber-400" />
+                )}
+                {isLivenessVerified ? "Liveness Verified" : "Verifying Liveness..."}
               </>
             ) : detectionState === "multiple" ? (
               <>
@@ -363,6 +401,16 @@ export default function FaceCaptureComponent({
               </>
             )}
           </div>
+
+          {/* Liveness progress bar */}
+          {detectionState === "found" && !isLivenessVerified && (
+            <div className="absolute bottom-3 left-3 right-3 h-1 bg-white/10 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-blue-500 transition-all duration-200" 
+                style={{ width: `${livenessProgress}%` }}
+              />
+            </div>
+          )}
 
           {/* Close button */}
           <button
@@ -401,7 +449,7 @@ export default function FaceCaptureComponent({
           </button>
           <button
             onClick={handleCapture}
-            disabled={detectionState !== "found" || !lastResult?.embedding}
+            disabled={detectionState !== "found" || !lastResult?.embedding || !isLivenessVerified}
             className={`flex-1 py-2.5 rounded-xl bg-gradient-to-r ${accentGradient} text-white font-medium text-sm shadow-lg disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95 hover:shadow-xl flex items-center justify-center gap-2`}
           >
             <Camera className="w-4 h-4" />

@@ -19,8 +19,11 @@ const FaceCaptureComponent = dynamic(
 
 // Roles eligible for face recognition login
 const FACE_RECOGNITION_ROLES: Set<string> = new Set([
-  USER_ROLES.ADMIN,
+  USER_ROLES.STUDENT,
+  USER_ROLES.STAFF,
+  USER_ROLES.HOD,
   USER_ROLES.PRINCIPAL,
+  USER_ROLES.ADMIN,
 ])
 
 const ROLE_OPTIONS = [
@@ -56,9 +59,10 @@ export default function LoginPage() {
     }
   }, [searchParams])
 
-  // Reset face login state when role changes
+  // Reset/Auto-activate face login state when role changes
   useEffect(() => {
-    setShowFaceLogin(false)
+    const isEligible = selectedRole && FACE_RECOGNITION_ROLES.has(selectedRole)
+    setShowFaceLogin(!!isEligible)
     setFaceLoginMessage(null)
     setFaceLoginProcessing(false)
     setFaceLoginAttempts(0)
@@ -73,9 +77,10 @@ export default function LoginPage() {
     setFaceLoginMessage(null)
 
     try {
-      const res = await apiClient.loginWithFace(embedding)
-      if (res && res.user) {
-        const user = res.user as any
+      if (!selectedRole) throw new Error("Role not selected")
+      const res = await apiClient.loginWithFace(embedding, selectedRole)
+      if (res && res.success && res.data?.user) {
+        const user = res.data.user as any
         const persistedAvatar = mockStorage.getProfileImage?.(user.id) || null
         mockStorage.setUser({
           id: user.id,
@@ -108,7 +113,7 @@ export default function LoginPage() {
         faceLoginDebounceRef.current = false
       }, 3000)
     }
-  }, [router])
+  }, [router, selectedRole])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -274,8 +279,8 @@ export default function LoginPage() {
                   {/* ═══ FACE LOGIN SECTION (Admin/Principal) ═══ */}
                   {isFaceEligible && (
                     <div className="mb-6">
-                      {/* Face Login Toggle */}
-                      {!showFaceLogin && faceLoginAttempts === 0 && (
+                      {/* Face Login Toggle (only shown if manually closed or failed) */}
+                      {!showFaceLogin && (
                         <button
                           type="button"
                           onClick={() => setShowFaceLogin(true)}
@@ -350,6 +355,10 @@ export default function LoginPage() {
                           </span>
                         </div>
                       )}
+
+                      <p className="text-[11px] text-gray-500 mt-2 text-center">
+                        Face login is optional. You can still use normal login anytime.
+                      </p>
 
                       {/* Divider */}
                       <div className="flex items-center gap-3 my-4">
