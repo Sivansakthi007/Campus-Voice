@@ -198,3 +198,15 @@ class UserLimit(Base):
     updated_by = Column(String(36), nullable=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+
+class ActivityLog(Base):
+    """Tracks administrative actions (e.g. Add/Edit/Delete users)."""
+    __tablename__ = "activity_logs"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    user_id = Column(String(36), nullable=False)  # User who performed action
+    department = Column(String(100), nullable=False)
+    action = Column(String(50), nullable=False)  # ADD_USER, EDIT_USER, DELETE_USER
+    details = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+

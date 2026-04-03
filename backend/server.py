@@ -10,7 +10,7 @@ from pathlib import Path
 from sqlalchemy import select, func, text, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_engine, get_session, Base
-from models import User, Complaint, StaffRating, HODRating, HODReportToggle, Notification, Suggestion, SuggestionVote, SignupApprovalSetting, UserLimit
+from models import User, Complaint, StaffRating, HODRating, HODReportToggle, Notification, Suggestion, SuggestionVote, SignupApprovalSetting, UserLimit, ActivityLog
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Dict, Any
 from enum import Enum
@@ -4157,6 +4157,399 @@ async def get_unread_notification_count(
     count = result.scalar() or 0
     
     return create_response(True, "Unread count retrieved", {"unread_count": count})
+
+
+# ===== HOD DEPARTMENT USER MANAGEMENT ENDPOINTS =====
+
+# Staff roles that are department-bound (allowed for HOD to assign)
+DEPARTMENT_STAFF_ROLES = [
+    "Assistant Professor",
+    "Lab Assistant",
+    "Discipline Coordinator",
+    "Infrastructure Coordinator",
+    "Scholarship Coordinator",
+    "Clerk",
+]
+
+class HODUserCreate(BaseModel):
+    """Request model for HOD creating a department user."""
+    name: str
+    email: EmailStr
+    password: str
+    role: str  # 'student' or 'staff'
+    student_id: Optional[str] = None
+    staff_id: Optional[str] = None
+    staff_role: Optional[str] = None
+
+
+class HODUserUpdate(BaseModel):
+    """Request model for HOD updating a department user."""
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    staff_role: Optional[str] = None
+
+
+@api_router.get("/hod/department-users")
+async def hod_list_department_users(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """List all users in HOD's department with student/staff counts."""
+    if current_user["role"] != UserRole.HOD:
+        return create_response(False, "Permission denied. HOD role required.", status_code=403)
+
+    hod_department = current_user.get("department")
+    if not hod_department:
+        return create_response(False, "HOD department not configured", status_code=400)
+
+    # Fetch all users in this department (students + staff only)
+    stmt = select(User).where(
+        User.department == hod_department,
+        User.role.in_([UserRole.STUDENT, UserRole.STAFF])
+    ).order_by(User.created_at.desc())
+    res = await session.execute(stmt)
+    users = res.scalars().all()
+
+    students = []
+    staff = []
+
+    for u in users:
+        is_student = u.role == UserRole.STUDENT
+        user_data = {
+            "id": u.id,
+            "email": u.email,
+            "name": u.name,
+            "role": u.role,
+            "department": u.department,
+            "student_id": u.student_id if is_student else None,
+            "staff_id": u.staff_id if not is_student else None,
+            "staff_role": u.staff_role,
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+        }
+        if u.role == UserRole.STUDENT:
+            students.append(user_data)
+        else:
+            staff.append(user_data)
+
+    return create_response(True, "Department users retrieved successfully", {
+        "students": students,
+        "staff": staff,
+        "student_count": len(students),
+        "staff_count": len(staff),
+        "department": hod_department,
+    })
+
+
+@api_router.post("/hod/department-users")
+async def hod_create_department_user(
+    user_data: HODUserCreate,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Create a new user (student/staff) in HOD's department. No registration password required."""
+    if current_user["role"] != UserRole.HOD:
+        return create_response(False, "Permission denied. HOD role required.", status_code=403)
+
+    hod_department = current_user.get("department")
+    if not hod_department:
+        return create_response(False, "HOD department not configured", status_code=400)
+
+    # Only allow student or staff roles
+    allowed_roles = [UserRole.STUDENT, UserRole.STAFF]
+    if user_data.role not in allowed_roles:
+        return create_response(False, "HOD can only create Student or Staff users", status_code=400)
+
+    # Check duplicate email
+    existing = (await session.execute(
+        select(User).where(User.email == user_data.email)
+    )).scalars().first()
+    if existing:
+        return create_response(False, "Email already registered", status_code=400)
+
+    # Validate staff_role if role is staff
+    if user_data.role == UserRole.STAFF:
+        if not user_data.staff_role or user_data.staff_role.strip() == "":
+            return create_response(False, "Staff Role is required for staff users", status_code=400)
+        if user_data.staff_role not in DEPARTMENT_STAFF_ROLES:
+            return create_response(
+                False,
+                f"Invalid staff role. Allowed: {', '.join(DEPARTMENT_STAFF_ROLES)}",
+                status_code=400
+            )
+
+    is_student = user_data.role == UserRole.STUDENT
+    try:
+        user_obj = User(
+            email=user_data.email,
+            password=hash_password(user_data.password),
+            name=user_data.name,
+            role=user_data.role,
+            department=hod_department,  # Auto-assign HOD's department
+            student_id=user_data.student_id if is_student else None,
+            staff_id=user_data.staff_id if not is_student else None,
+            staff_role=user_data.staff_role if user_data.role == UserRole.STAFF else None,
+        )
+        session.add(user_obj)
+        await session.commit()
+        await session.refresh(user_obj)
+    except Exception as e:
+        await session.rollback()
+        logger.error(f"HOD user creation failed: {str(e)}")
+        return create_response(False, "Failed to create user. Please try again.", status_code=500)
+
+    logger.info(f"HOD {current_user['id']} created user {user_obj.id} ({user_data.role}) in dept {hod_department}")
+
+    # Log activity
+    try:
+        activity = ActivityLog(
+            user_id=current_user["id"],
+            department=hod_department,
+            action="ADD_USER",
+            details=f"Added {user_data.role}: {user_data.name} ({user_data.email})"
+        )
+        session.add(activity)
+        await session.commit()
+    except Exception as e:
+        logger.warning(f"Failed to log activity: {str(e)}")
+
+    return create_response(True, "User created successfully", {
+        "id": user_obj.id,
+        "email": user_obj.email,
+        "name": user_obj.name,
+        "role": user_obj.role,
+        "department": user_obj.department,
+        "student_id": user_obj.student_id if is_student else None,
+        "staff_id": user_obj.staff_id if not is_student else None,
+        "staff_role": user_obj.staff_role,
+        "created_at": user_obj.created_at.isoformat() if user_obj.created_at else None,
+    })
+
+
+@api_router.put("/hod/department-users/{user_id}")
+async def hod_update_department_user(
+    user_id: str,
+    update_data: HODUserUpdate,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Update a user in HOD's department."""
+    if current_user["role"] != UserRole.HOD:
+        return create_response(False, "Permission denied. HOD role required.", status_code=403)
+
+    hod_department = current_user.get("department")
+    if not hod_department:
+        return create_response(False, "HOD department not configured", status_code=400)
+
+    user_obj = await session.get(User, user_id)
+    if not user_obj:
+        return create_response(False, "User not found", status_code=404)
+
+    # Verify user belongs to HOD's department
+    if user_obj.department != hod_department:
+        return create_response(False, "Access denied. User is not in your department.", status_code=403)
+
+    # Only allow editing students and staff
+    if user_obj.role not in (UserRole.STUDENT, UserRole.STAFF):
+        return create_response(False, "Can only edit Student or Staff users", status_code=400)
+
+    # Update fields
+    if update_data.name is not None:
+        user_obj.name = update_data.name
+
+    if update_data.email is not None:
+        # Check email uniqueness
+        if update_data.email != user_obj.email:
+            existing = (await session.execute(
+                select(User).where(User.email == update_data.email)
+            )).scalars().first()
+            if existing:
+                return create_response(False, "Email already in use by another user", status_code=400)
+        user_obj.email = update_data.email
+
+    if update_data.staff_role is not None and user_obj.role == UserRole.STAFF:
+        if update_data.staff_role not in DEPARTMENT_STAFF_ROLES:
+            return create_response(
+                False,
+                f"Invalid staff role. Allowed: {', '.join(DEPARTMENT_STAFF_ROLES)}",
+                status_code=400
+            )
+        user_obj.staff_role = update_data.staff_role
+
+    try:
+        await session.commit()
+        await session.refresh(user_obj)
+    except Exception as e:
+        await session.rollback()
+        logger.error(f"HOD user update failed: {str(e)}")
+        return create_response(False, "Failed to update user", status_code=500)
+
+    is_student = user_obj.role == UserRole.STUDENT
+    logger.info(f"HOD {current_user['id']} updated user {user_id} in dept {hod_department}")
+
+    # Log activity
+    try:
+        activity = ActivityLog(
+            user_id=current_user["id"],
+            department=hod_department,
+            action="EDIT_USER",
+            details=f"Updated user: {user_obj.name} ({user_obj.email})"
+        )
+        session.add(activity)
+        await session.commit()
+    except Exception as e:
+        logger.warning(f"Failed to log activity: {str(e)}")
+
+    return create_response(True, "User updated successfully", {
+        "id": user_obj.id,
+        "email": user_obj.email,
+        "name": user_obj.name,
+        "role": user_obj.role,
+        "department": user_obj.department,
+        "student_id": user_obj.student_id if is_student else None,
+        "staff_id": user_obj.staff_id if not is_student else None,
+        "staff_role": user_obj.staff_role,
+        "created_at": user_obj.created_at.isoformat() if user_obj.created_at else None,
+    })
+
+
+@api_router.delete("/hod/department-users/{user_id}")
+async def hod_delete_department_user(
+    user_id: str,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Delete a user from HOD's department."""
+    if current_user["role"] != UserRole.HOD:
+        return create_response(False, "Permission denied. HOD role required.", status_code=403)
+
+    hod_department = current_user.get("department")
+    if not hod_department:
+        return create_response(False, "HOD department not configured", status_code=400)
+
+    # Prevent HOD from deleting themselves
+    if current_user["id"] == user_id:
+        return create_response(False, "Cannot delete yourself", status_code=400)
+
+    user_obj = await session.get(User, user_id)
+    if not user_obj:
+        return create_response(False, "User not found", status_code=404)
+
+    # Verify user belongs to HOD's department
+    if user_obj.department != hod_department:
+        return create_response(False, "Access denied. User is not in your department.", status_code=403)
+
+    # Only allow deleting students and staff
+    if user_obj.role not in (UserRole.STUDENT, UserRole.STAFF):
+        return create_response(False, "Can only delete Student or Staff users", status_code=400)
+
+    deleted_name = user_obj.name
+    await session.delete(user_obj)
+    await session.commit()
+    logger.info(f"HOD {current_user['id']} deleted user {user_id} ({deleted_name}) from dept {hod_department}")
+
+    # Log activity
+    try:
+        activity = ActivityLog(
+            user_id=current_user["id"],
+            department=hod_department,
+            action="DELETE_USER",
+            details=f"Deleted user: {deleted_name} ({user_obj.email})"
+        )
+        session.add(activity)
+        await session.commit()
+    except Exception as e:
+        logger.warning(f"Failed to log activity: {str(e)}")
+
+    return create_response(True, f"User '{deleted_name}' deleted successfully")
+
+
+@api_router.get("/hod/department-users/search")
+async def hod_search_department_users(
+    q: str,
+    role: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Search users in HOD's department by name or ID/Email."""
+    if current_user["role"] != UserRole.HOD:
+        return create_response(False, "Permission denied. HOD role required.", status_code=403)
+
+    hod_department = current_user.get("department")
+    if not hod_department:
+        return create_response(False, "HOD department not configured", status_code=400)
+
+    # Base statement with department filter
+    stmt = select(User).where(
+        User.department == hod_department,
+        User.role.in_([UserRole.STUDENT, UserRole.STAFF])
+    )
+
+    # Apply search filter
+    search_term = f"%{q}%"
+    stmt = stmt.where(
+        or_(
+            User.name.ilike(search_term),
+            User.email.ilike(search_term),
+            User.student_id.ilike(search_term),
+            User.staff_id.ilike(search_term)
+        )
+    )
+
+    # Apply role filter if provided
+    if role and role in ["student", "staff"]:
+        stmt = stmt.where(User.role == role)
+
+    res = await session.execute(stmt)
+    users = res.scalars().all()
+
+    result = []
+    for u in users:
+        is_student = u.role == UserRole.STUDENT
+        result.append({
+            "id": u.id,
+            "email": u.email,
+            "name": u.name,
+            "role": u.role,
+            "department": u.department,
+            "student_id": u.student_id if is_student else None,
+            "staff_id": u.staff_id if not is_student else None,
+            "staff_role": u.staff_role,
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+        })
+
+    return create_response(True, f"Found {len(result)} users", result)
+
+
+@api_router.get("/hod/department-users/activity")
+async def hod_get_department_activity(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get recent administrative activity for the HOD's department."""
+    if current_user["role"] != UserRole.HOD:
+        return create_response(False, "Permission denied. HOD role required.", status_code=403)
+
+    hod_department = current_user.get("department")
+    if not hod_department:
+        return create_response(False, "HOD department not configured", status_code=400)
+
+    stmt = select(ActivityLog).where(
+        ActivityLog.department == hod_department
+    ).order_by(ActivityLog.created_at.desc()).limit(20)
+    
+    res = await session.execute(stmt)
+    logs = res.scalars().all()
+
+    result = []
+    for log in logs:
+        result.append({
+            "id": log.id,
+            "action": log.action,
+            "details": log.details,
+            "created_at": log.created_at.isoformat() if log.created_at else None
+        })
+
+    return create_response(True, "Activity logs retrieved", result)
 
 
 # Include router

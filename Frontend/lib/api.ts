@@ -837,6 +837,70 @@ class ApiClient {
     return response.data?.unread_count || 0
   }
 
+  // ===== HOD DEPARTMENT USER MANAGEMENT METHODS =====
+
+  async getDepartmentUsers(): Promise<{
+    students: any[]
+    staff: any[]
+    student_count: number
+    staff_count: number
+    department: string
+  }> {
+    const response = await this.request<{
+      students: any[]
+      staff: any[]
+      student_count: number
+      staff_count: number
+      department: string
+    }>("/api/hod/department-users")
+    return response.data
+  }
+
+  async createDepartmentUser(userData: {
+    name: string
+    email: string
+    password: string
+    role: string
+    student_id?: string
+    staff_id?: string
+    staff_role?: string
+  }): Promise<any> {
+    const response = await this.request<any>("/api/hod/department-users", {
+      method: "POST",
+      body: JSON.stringify(userData),
+    })
+    return response.data
+  }
+
+  async updateDepartmentUser(userId: string, updateData: {
+    name?: string
+    email?: string
+    staff_role?: string
+  }): Promise<any> {
+    const response = await this.request<any>(`/api/hod/department-users/${userId}`, {
+      method: "PUT",
+      body: JSON.stringify(updateData),
+    })
+    return response.data
+  }
+
+  async deleteDepartmentUser(userId: string): Promise<void> {
+    await this.request(`/api/hod/department-users/${userId}`, {
+      method: "DELETE",
+    })
+  }
+
+  async searchDepartmentUsers(q: string, role?: string): Promise<any[]> {
+    const qs = `?q=${encodeURIComponent(q)}${role ? `&role=${role}` : ""}`
+    const response = await this.request<any[]>(`/api/hod/department-users/search${qs}`)
+    return response.data
+  }
+
+  async getDepartmentActivity(): Promise<any[]> {
+    const response = await this.request<any[]>("/api/hod/department-users/activity")
+    return response.data || []
+  }
+
   // ===== SMART SUGGESTION METHODS =====
 
   async getSuggestions(sort: "latest" | "votes" = "latest"): Promise<any[]> {

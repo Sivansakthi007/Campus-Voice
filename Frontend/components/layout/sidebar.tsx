@@ -23,6 +23,7 @@ import {
   Lightbulb,
   UserCheck,
   Hash,
+  UserCog,
 } from "lucide-react"
 import { USER_ROLES, ROLE_COLORS, type UserRole } from "@/lib/constants"
 import { mockStorage } from "@/lib/mock-data"
@@ -57,6 +58,7 @@ const SIDEBAR_ITEMS = {
     { icon: LayoutDashboard, label: "Dashboard", path: "" },
     { icon: List, label: "All Complaints", path: "/complaints" },
     { icon: Users, label: "Staff Management", path: "/staff" },
+    { icon: UserCog, label: "Dept. Users", path: "/department-users" },
     { icon: Trophy, label: "Staff Performance", path: "/staff-performance-report" },
     { icon: BarChart3, label: "Analytics", path: "/analytics" },
     { icon: User, label: "Profile", path: "/profile" },
