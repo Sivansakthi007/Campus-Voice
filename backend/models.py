@@ -210,3 +210,18 @@ class ActivityLog(Base):
     details = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+
+class FaceLoginAttempt(Base):
+    """Audit log for all face recognition login attempts (success and failure)."""
+    __tablename__ = "face_login_attempts"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    role = Column(String(50), nullable=False)            # Role attempted
+    matched_user_id = Column(String(36), nullable=True)  # NULL if no match found
+    matched_user_name = Column(String(255), nullable=True)
+    confidence_score = Column(Float, nullable=True)      # Cosine similarity 0.0–1.0
+    success = Column(Boolean, default=False, nullable=False)
+    ip_address = Column(String(45), nullable=True)       # Client IP for forensics
+    message = Column(String(512), nullable=True)         # Human-readable result
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+

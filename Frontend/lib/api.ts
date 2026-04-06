@@ -1009,6 +1009,21 @@ class ApiClient {
     return await this.request<{ face_enabled: boolean; role: string }>("/api/auth/face/status")
   }
 
+  async getFaceLoginAttempts(): Promise<ApiResponse<Array<{
+    id: string
+    role: string
+    matched_user_id: string | null
+    matched_user_name: string | null
+    confidence_score: number | null
+    confidence_pct: number | null
+    success: boolean
+    ip_address: string | null
+    message: string | null
+    created_at: string | null
+  }>>> {
+    return await this.request("/api/auth/face/login-attempts")
+  }
+
   // Token management
   setToken(token: string | null) {
     this.token = token

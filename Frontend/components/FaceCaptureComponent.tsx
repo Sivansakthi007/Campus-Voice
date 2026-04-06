@@ -7,6 +7,7 @@ import {
   RefreshCw,
   Check,
   AlertTriangle,
+  AlertCircle,
   Loader2,
   Scan,
   X,
@@ -78,6 +79,8 @@ export default function FaceCaptureComponent({
   const [modelsReady, setModelsReady] = useState(false)
   const [livenessProgress, setLivenessProgress] = useState(0) // 0 to 100
   const [isLivenessVerified, setIsLivenessVerified] = useState(false)
+  const [noFaceTimeout, setNoFaceTimeout] = useState(false)
+  const detectionStartRef = useRef<number>(0)
 
   // Load models on mount
   useEffect(() => {
@@ -122,6 +125,22 @@ export default function FaceCaptureComponent({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cameraState])
+
+  // 15-second timeout for "No face detected" in login mode
+  useEffect(() => {
+    if (mode !== "login" || cameraState !== "active") return
+    detectionStartRef.current = Date.now()
+    setNoFaceTimeout(false)
+
+    const timer = setTimeout(() => {
+      // If still detecting (no face found) after 15s, show timeout
+      if (detectionState === "detecting" || detectionState === "none") {
+        setNoFaceTimeout(true)
+      }
+    }, 15000)
+
+    return () => clearTimeout(timer)
+  }, [mode, cameraState, detectionState])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -460,11 +479,32 @@ export default function FaceCaptureComponent({
 
       {/* Login mode helper text */}
       {mode === "login" && !isProcessing && (
-        <p className="text-xs text-gray-500 text-center max-w-[320px]">
-          {detectionState === "found"
-            ? "Face detected! Attempting login..."
-            : "Position your face in the camera frame"}
-        </p>
+        <div className="text-center max-w-[320px]">
+          {noFaceTimeout && detectionState !== "found" ? (
+            <div className="flex flex-col items-center gap-2">
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                <span className="text-xs text-amber-400">No face detected. Please try again.</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setNoFaceTimeout(false)
+                  detectionStartRef.current = Date.now()
+                }}
+                className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+              >
+                Retry detection
+              </button>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500">
+              {detectionState === "found"
+                ? "Face detected! Attempting login..."
+                : "Position your face in the camera frame"}
+            </p>
+          )}
+        </div>
       )}
     </div>
   )

@@ -10,7 +10,7 @@ from pathlib import Path
 from sqlalchemy import select, func, text, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_engine, get_session, Base
-from models import User, Complaint, StaffRating, HODRating, HODReportToggle, Notification, Suggestion, SuggestionVote, SignupApprovalSetting, UserLimit, ActivityLog
+from models import User, Complaint, StaffRating, HODRating, HODReportToggle, Notification, Suggestion, SuggestionVote, SignupApprovalSetting, UserLimit, ActivityLog, FaceLoginAttempt
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Dict, Any
 from enum import Enum
@@ -331,6 +331,33 @@ async def startup():
                         logger.info("Migration: Added 'face_enabled' column to users table")
             except Exception as migration_err:
                 logger.warning(f"Migration check for face columns: {str(migration_err)}")
+
+            # Safe migration: create face_login_attempts table if it doesn't exist
+            try:
+                async with engine.begin() as conn:
+                    result = await conn.execute(text(
+                        "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES "
+                        "WHERE TABLE_NAME = 'face_login_attempts' AND TABLE_SCHEMA = DATABASE()"
+                    ))
+                    if result.fetchone() is None:
+                        await conn.execute(text(
+                            "CREATE TABLE face_login_attempts ("
+                            "  id VARCHAR(36) PRIMARY KEY,"
+                            "  role VARCHAR(50) NOT NULL,"
+                            "  matched_user_id VARCHAR(36) NULL,"
+                            "  matched_user_name VARCHAR(255) NULL,"
+                            "  confidence_score FLOAT NULL,"
+                            "  success BOOLEAN NOT NULL DEFAULT FALSE,"
+                            "  ip_address VARCHAR(45) NULL,"
+                            "  message VARCHAR(512) NULL,"
+                            "  created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                            ")"
+                        ))
+                        logger.info("Migration: Created 'face_login_attempts' table")
+                    else:
+                        logger.info("Migration: 'face_login_attempts' table already exists")
+            except Exception as migration_err:
+                logger.warning(f"Migration check for face_login_attempts: {str(migration_err)}")
 
             # Seed signup_approval_settings with defaults (all roles enabled)
             try:
@@ -749,7 +776,7 @@ def create_access_token(data: dict) -> str:
     return encoded_jwt
 
 # ===== FACE RECOGNITION HELPERS =====
-FACE_MATCH_THRESHOLD = 0.6  # Cosine similarity threshold for face matching
+FACE_MATCH_THRESHOLD = 0.9  # Cosine similarity threshold — enforces >90% confidence
 
 def cosine_similarity(a: list, b: list) -> float:
     """Compute cosine similarity between two face embeddings."""
@@ -1135,9 +1162,18 @@ async def register_face(
 @api_router.post("/auth/face/login")
 async def face_login(
     data: FaceLoginRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session)
 ):
-    """Attempt role-based face login by comparing embedding against registered faces within the role."""
+    """Attempt role-based face login by comparing embedding against registered faces within the role.
+    
+    Security:
+    - Only matches faces within the EXACT role selected (no cross-role leakage)
+    - Requires >90% cosine similarity confidence to grant access
+    - Every attempt (success or failure) is logged to face_login_attempts table
+    """
+    client_ip = request.client.host if request.client else "unknown"
+
     # Fetch users with face enabled that match the EXACT role selected
     stmt = select(User).where(
         User.face_enabled == True,
@@ -1148,8 +1184,21 @@ async def face_login(
     users_with_face = res.scalars().all()
 
     if not users_with_face:
-        # Do NOT search across other roles as per requirements
-        return create_response(False, f"Face not recognized for the {data.role} role. Please login manually.", status_code=401)
+        # Log failed attempt — no registered faces for this role
+        msg = "Unauthorized user. Please register."
+        attempt = FaceLoginAttempt(
+            role=data.role,
+            matched_user_id=None,
+            matched_user_name=None,
+            confidence_score=None,
+            success=False,
+            ip_address=client_ip,
+            message=msg
+        )
+        session.add(attempt)
+        await session.commit()
+        logger.warning(f"Face login denied for role '{data.role}' — no registered faces. IP: {client_ip}")
+        return create_response(False, msg, status_code=401)
 
     best_match = None
     best_score = 0.0
@@ -1169,7 +1218,10 @@ async def face_login(
             logger.warning(f"Error comparing face for user {user_obj.id}: {str(e)}")
             continue
 
+    confidence_pct = round(best_score * 100, 1)
+
     if best_match and best_score >= FACE_MATCH_THRESHOLD:
+        # ── SUCCESS ──
         access_token = create_access_token({"sub": best_match.id})
         is_student_role = best_match.role == UserRole.STUDENT
         user_response = UserResponse(
@@ -1183,16 +1235,46 @@ async def face_login(
             staff_role=best_match.staff_role,
             created_at=best_match.created_at.isoformat() if best_match.created_at else None
         )
-        logger.info(f"Role-based face login successful for {best_match.role} {best_match.id} (score: {best_score:.3f})")
+
+        # Log successful attempt
+        success_msg = f"Face login granted ({confidence_pct}% confidence)"
+        attempt = FaceLoginAttempt(
+            role=data.role,
+            matched_user_id=best_match.id,
+            matched_user_name=best_match.name,
+            confidence_score=best_score,
+            success=True,
+            ip_address=client_ip,
+            message=success_msg
+        )
+        session.add(attempt)
+        await session.commit()
+
+        logger.info(f"Face login SUCCESS: {best_match.role} {best_match.id} — {confidence_pct}% confidence, IP: {client_ip}")
         return create_response(True, "Face login successful", {
             "access_token": access_token,
             "token_type": "bearer",
             "user": user_response.model_dump(),
-            "confidence": round(best_score, 3)
+            "confidence": round(best_score, 3),
+            "confidence_pct": confidence_pct
         })
     else:
-        logger.info(f"Face login failed for role {data.role}. Best score: {best_score:.3f} (threshold: {FACE_MATCH_THRESHOLD})")
-        return create_response(False, f"Face not recognized for the selected role", status_code=401)
+        # ── FAILED MATCH ──
+        fail_msg = "Unauthorized user. Face does not match any registered account."
+        attempt = FaceLoginAttempt(
+            role=data.role,
+            matched_user_id=best_match.id if best_match else None,
+            matched_user_name=best_match.name if best_match else None,
+            confidence_score=best_score if best_score > 0 else None,
+            success=False,
+            ip_address=client_ip,
+            message=f"{fail_msg} (best: {confidence_pct}%, required: {FACE_MATCH_THRESHOLD * 100}%)"
+        )
+        session.add(attempt)
+        await session.commit()
+
+        logger.warning(f"Face login DENIED for role '{data.role}' — best score: {confidence_pct}% (threshold: {FACE_MATCH_THRESHOLD * 100}%), IP: {client_ip}")
+        return create_response(False, fail_msg, status_code=401)
 
 
 @api_router.delete("/auth/face/remove")
@@ -1227,6 +1309,34 @@ async def face_status(
         "role": user_obj.role
     })
 
+
+@api_router.get("/auth/face/login-attempts")
+async def get_face_login_attempts(
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Retrieve face login attempt audit logs (admin/principal only)."""
+    if current_user["role"] not in [UserRole.ADMIN, UserRole.PRINCIPAL]:
+        return create_response(False, "Forbidden", status_code=403)
+
+    stmt = select(FaceLoginAttempt).order_by(FaceLoginAttempt.created_at.desc()).limit(100)
+    res = await session.execute(stmt)
+    attempts = res.scalars().all()
+
+    data = [{
+        "id": a.id,
+        "role": a.role,
+        "matched_user_id": a.matched_user_id,
+        "matched_user_name": a.matched_user_name,
+        "confidence_score": a.confidence_score,
+        "confidence_pct": round(a.confidence_score * 100, 1) if a.confidence_score else None,
+        "success": a.success,
+        "ip_address": a.ip_address,
+        "message": a.message,
+        "created_at": a.created_at.isoformat() if a.created_at else None
+    } for a in attempts]
+
+    return create_response(True, "Face login attempts retrieved", data)
 
 
 @api_router.get("/users")

@@ -81,6 +81,7 @@ export default function LoginPage() {
       const res = await apiClient.loginWithFace(embedding, selectedRole)
       if (res && res.success && res.data?.user) {
         const user = res.data.user as any
+        const confidence = (res.data as any).confidence_pct || Math.round((res.data as any).confidence * 100)
         const persistedAvatar = mockStorage.getProfileImage?.(user.id) || null
         mockStorage.setUser({
           id: user.id,
@@ -92,7 +93,7 @@ export default function LoginPage() {
           staff_id: user.staff_id || user.staffId || "",
           avatar: persistedAvatar || user.avatar || "",
         })
-        toast.success(`Welcome back, ${user.name}! 🎉 (Face login)`)
+        toast.success(`Welcome back, ${user.name}! 🎉 (${confidence}% match)`)
         setTimeout(() => {
           router.push(`/dashboard/${user.role}`)
         }, 800)
@@ -101,10 +102,17 @@ export default function LoginPage() {
     } catch (error: any) {
       console.error("Face login error:", error)
       const msg = error?.message || "Face not recognized."
-      setFaceLoginMessage(msg.includes("not recognized") || msg.includes("No face data")
-        ? "Face not recognized. Please login manually."
-        : msg
-      )
+
+      // Show exact server messages matching the security requirements
+      if (msg.includes("Unauthorized") || msg.includes("register")) {
+        setFaceLoginMessage("⚠️ Unauthorized user. Please register first.")
+      } else if (msg.includes("does not match")) {
+        setFaceLoginMessage("🚫 Face does not match any registered account.")
+      } else if (msg.includes("No face")) {
+        setFaceLoginMessage("📷 No face detected. Please try again.")
+      } else {
+        setFaceLoginMessage(msg)
+      }
       setFaceLoginAttempts(prev => prev + 1)
     } finally {
       setFaceLoginProcessing(false)
