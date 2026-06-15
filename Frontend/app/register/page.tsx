@@ -34,7 +34,7 @@ const FaceCaptureComponent = dynamic(
 )
 
 // Use the same backend URL as the API client for production deployments
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "https://campus-voice-backend-cr0o.onrender.com";
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "https://campus-voice-backend-qfbf.onrender.com";
 
 // Signup approval status fetched from backend
 type SignupApprovalMap = Record<string, boolean>;
